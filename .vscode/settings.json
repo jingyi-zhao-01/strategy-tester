@@ -1,0 +1,11 @@
+{
+    "[python]": {
+        "editor.formatOnSave": true
+    },
+    "python.formatting.provider": "ms-python.black-formatter",
+    "python.formatting.blackPath": "black",
+    "python.formatting.blackArgs": [
+        "--line-length",
+        "100"
+    ]
+}

@@ -1,7 +1,7 @@
-from polygon import RESTClient
 from collections import defaultdict
-client = RESTClient("1TxWblBP3vePJcP2O84xMNFxvp25tYA7")
-from util import convert_to_nyc_time
+from util import convert_to_nyc_time, get_polygon_client
+
+client = get_polygon_client()
 
 # target_option_ticker = ["O:MP270115C00055000", "O:MP270815C00041000"]
 
@@ -11,7 +11,6 @@ pheripheral_ticker = ["O:MP260515C00050000"]
 
 
 total_tickers = target_ticker + pheripheral_ticker
-
 
 
 aggs_map = defaultdict(list)
@@ -30,7 +29,7 @@ for ticker in total_tickers:
         aggs_map[ticker].append(a)
 
 for ticker, aggs in aggs_map.items():
-    print('--------------------------------------')
+    print("--------------------------------------")
     for agg in aggs:
         # If agg is an object, convert to dict
         agg_dict = agg.__dict__ if hasattr(agg, "__dict__") else agg
@@ -43,6 +42,3 @@ for ticker, aggs in aggs_map.items():
         print(
             f"Ticker: {ticker}, Volume: {volume}, Date: {time}, Transactions: {transactions}, VWAP: {vwap}, Open: {open}, Close: {close}"
         )
-
-
-
