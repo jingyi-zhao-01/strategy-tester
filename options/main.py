@@ -119,7 +119,7 @@ async def main():
             contract.underlying_ticker, contract.ticker
         )
         db_snapshot = await process_option_snapshot(contract.ticker, snapshot)
-        print(f"Added snapshot for {contract.ticker}: OI={db_snapshot.openInterest}")
+        print(f"Added snapshot for {contract.ticker}: OI={db_snapshot.open_interest}")
 
         print(option_fetcher.format_snapshot(contract, snapshot))
         print("-" * 80)

@@ -24,7 +24,7 @@ model Options {
 
 model OptionSnapshot {
   id            Int      @id @default(autoincrement())
-  ticker        String   @unique
+  ticker        String
   volume        Float?
   day_change    Float?
   day_close     Float?
