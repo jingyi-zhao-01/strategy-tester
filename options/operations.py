@@ -80,10 +80,9 @@ async def upsert_option_snapshot(
         },
         data={
             "create": {
-                "ticker": contract_ticker,
                 "open_interest": snapshot.open_interest,
                 "volume": snapshot.day.volume if snapshot.day else None,
-                "implied_volatility": snapshot.implied_volatility,
+                "implied_vol": snapshot.implied_volatility,
                 "last_price": snapshot.day.close if snapshot.day else None,
                 "last_updated": last_updated_dt,
                 "day_open": snapshot.day.open if snapshot.day else None,
@@ -92,10 +91,9 @@ async def upsert_option_snapshot(
                 "option": {"connect": {"ticker": contract_ticker}},
             },
             "update": {
-                "ticker": contract_ticker,
                 "open_interest": snapshot.open_interest,
                 "volume": snapshot.day.volume if snapshot.day else None,
-                "implied_volatility": snapshot.implied_volatility,
+                "implied_vol": snapshot.implied_volatility,
                 "last_price": snapshot.day.close if snapshot.day else None,
                 "last_updated": last_updated_dt,
                 "day_open": snapshot.day.open if snapshot.day else None,
