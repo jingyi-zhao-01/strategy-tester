@@ -1,9 +1,10 @@
 from util import get_polygon_client, parse_option_symbol
-from polygon.rest.models.contracts import OptionsContract
-from polygon.rest.models.snapshot import OptionContractSnapshot
+from models import OptionsContract, OptionContractSnapshot
+
 from typing import List
-from datetime import datetime
-from models.option_models import OptionSymbolComponents
+from operations import process_option_contract, process_option_snapshot
+
+LIMIT = 10
 
 # ASSET = "SE"
 # LIMIT = 100
@@ -40,7 +41,7 @@ class OptionFetcher:
         contracts: List[OptionsContract] = []
         for contract in self.client.list_options_contracts(
             underlying_ticker=self.asset,
-            contract_type="put",
+            contract_type="call",
             # strike_price=55,
             expired="false",
             order="desc",
@@ -98,22 +99,33 @@ class OptionFetcher:
         )
 
 
+async def main():
 
-
-if __name__ == "__main__":
     option_fetcher = OptionFetcher(ASSET)
     contracts = option_fetcher.get_contracts()
     print(f"Total contracts found: {len(contracts)}")
 
-    # Get contracts within price range
     contracts_within_range = option_fetcher.get_contract_within_price_range(
         contracts, PRICE_RANGE, YEAR_RANGE
     )
 
     print(f"Contracts within price range: {len(contracts_within_range)}")
 
-    for contract in contracts_within_range:
+    for contract in contracts_within_range[:LIMIT]:
+        db_contract = await process_option_contract(contract)
+        print(f"Upserted contract: {db_contract.ticker}")
+
         snapshot = option_fetcher.get_contract_snapshot(
             contract.underlying_ticker, contract.ticker
         )
+        db_snapshot = await process_option_snapshot(contract.ticker, snapshot)
+        print(f"Added snapshot for {contract.ticker}: OI={db_snapshot.openInterest}")
+
         print(option_fetcher.format_snapshot(contract, snapshot))
+        print("-" * 80)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    asyncio.run(main())

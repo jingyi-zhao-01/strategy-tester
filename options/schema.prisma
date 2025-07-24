@@ -1,0 +1,43 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+generator client {
+  provider  = "prisma-client-py"
+  interface = "asyncio"
+  recursive_type_depth = 5
+}
+
+model Options {
+  id                Int             @id @default(autoincrement())
+  ticker            String          @unique
+  underlying_ticker String
+  contract_type     String
+  expiration_date   DateTime
+  strike_price      Float
+  snapshots         OptionSnapshot[]
+
+  @@index([underlying_ticker, expiration_date])
+  @@index([strike_price])
+  @@map("options")
+}
+
+model OptionSnapshot {
+  id            Int      @id @default(autoincrement())
+  ticker        String   @unique
+  volume        Float?
+  day_change    Float?
+  day_close     Float?
+  day_open      Float?
+  implied_vol   Float?
+  last_price    Float?
+  last_updated  DateTime?
+  open_interest Int?
+  option        Options  @relation(fields: [ticker], references: [ticker])
+
+  @@unique([ticker, last_updated])
+  @@map("option_snapshots")
+}
+
+
+

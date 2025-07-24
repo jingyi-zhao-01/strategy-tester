@@ -4,7 +4,7 @@ from typing import Literal
 
 
 @dataclass
-class OptionSymbolComponents:
+class OptionSymbol:
     """
     Data class representing components of an option symbol
 
@@ -17,6 +17,6 @@ class OptionSymbolComponents:
     """
 
     underlying: str
+    strike: float
     expiration: datetime
     contract_type: Literal["CALL", "PUT"]
-    strike: float

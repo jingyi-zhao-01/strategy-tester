@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from polygon import RESTClient
 from dotenv import load_dotenv
-from models.option_models import OptionSymbolComponents
+from models.option_models import OptionSymbol
 
 # Load environment variables from .env file
 load_dotenv()
@@ -39,7 +39,7 @@ def get_polygon_client():
     return RESTClient(api_key)
 
 
-def parse_option_symbol(symbol: str, underlying_asset: str) -> OptionSymbolComponents:
+def parse_option_symbol(symbol: str, underlying_asset: str) -> OptionSymbol:
 
     # Remove option prefix if present
     clean_symbol = symbol.replace("O:", "")
@@ -60,7 +60,7 @@ def parse_option_symbol(symbol: str, underlying_asset: str) -> OptionSymbolCompo
     contract_type = "CALL" if clean_symbol[date_start_idx + 6] == "C" else "PUT"
     strike = float(clean_symbol[date_start_idx + 7 :]) / 1000  # 250.00
 
-    return OptionSymbolComponents(
+    return OptionSymbol(
         underlying=underlying,
         expiration=datetime(year, month, day),
         contract_type=contract_type,
