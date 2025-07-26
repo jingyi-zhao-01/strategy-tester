@@ -1,10 +1,14 @@
-from util import get_polygon_client, parse_option_symbol
-from models import OptionsContract, OptionContractSnapshot
+import asyncio
+import os
 
-from typing import List
-from operations import process_option_contract, process_option_snapshot
+import httpx
+from log import Log
+from models import OptionContractSnapshot, OptionsContract
+from operations import db, process_option_contracts, process_option_snapshot
+from polygon import RESTClient
+from util import parse_option_symbol
 
-LIMIT = 10
+LIMIT = 5
 
 # ASSET = "SE"
 # LIMIT = 100
@@ -12,8 +16,8 @@ LIMIT = 10
 # YEAR_RANGE = (2025, 2025)
 
 
-ASSET = "NBIS"
-PRICE_RANGE = (55, 70)
+UNDERLYING_ASSET = "NBIS"
+PRICE_RANGE = (40, 70)
 YEAR_RANGE = (2025, 2025)
 
 
@@ -27,105 +31,123 @@ YEAR_RANGE = (2025, 2025)
 # YEAR_RANGE = (2025, 2025)
 
 
-client = get_polygon_client()
-
 # TODO: Open Interest vs expiration date vs strike price
 
 
-class OptionFetcher:
+class Core:
     def __init__(self, asset: str):
         self.asset = asset
-        self.client = get_polygon_client()
+        self.api_key = os.getenv("POLYGON_API_KEY")
+        if not self.api_key:
+            raise ValueError("POLYGON_API_KEY environment variable is not set")
+        self.client = RESTClient(self.api_key)
 
-    def get_contracts(self) -> List[OptionsContract]:
-        contracts: List[OptionsContract] = []
+    def get_call_contracts_sync(self) -> list[OptionsContract]:
+        contracts: list[OptionsContract] = []
         for contract in self.client.list_options_contracts(
             underlying_ticker=self.asset,
             contract_type="call",
-            # strike_price=55,
             expired="false",
             order="desc",
-            # limit=20,
             sort="strike_price",
         ):
             contracts.append(contract)
         return contracts
 
-    def get_contract_within_price_range(
-        self,
-        contracts: List[OptionsContract],
-        price_range: tuple[float, float],
-        year_range: tuple[int, int] = None,
-    ) -> List[OptionContractSnapshot]:
-        min_price, max_price = price_range
-        start_year, end_year = year_range if year_range else (None, None)
-        return [
-            contract
-            for contract in contracts
-            if min_price <= contract.strike_price <= max_price
-            and (
-                parse_option_symbol(contract.ticker, ASSET).expiration.year
-                >= start_year
-                if start_year
-                else True
-            )
-            and (
-                parse_option_symbol(contract.ticker, ASSET).expiration.year <= end_year
-                if end_year
-                else True
-            )
-        ]
+    def get_put_contracts_sync(self) -> list[OptionsContract]:
+        contracts: list[OptionsContract] = []
+        for contract in self.client.list_options_contracts(
+            underlying_ticker=self.asset,
+            contract_type="put",
+            expired="false",
+            order="desc",
+            sort="strike_price",
+        ):
+            contracts.append(contract)
+        return contracts
 
     def get_contract_snapshot(
         self, underlying_asset: str, option_ticker_name: str
     ) -> OptionContractSnapshot:
-        client = get_polygon_client()
-        snapshot = client.get_snapshot_option(underlying_asset, option_ticker_name)
+        snapshot = self.client.get_snapshot_option(underlying_asset, option_ticker_name)
         return snapshot
 
-    def format_snapshot(
-        self, contract: OptionsContract, snapshot: OptionContractSnapshot
-    ) -> str:
-        return (
-            f"Ticker: {contract.ticker} | "
-            f"OI: {snapshot.open_interest or 'N/A'} | "
-            f"Day Volume: {snapshot.day.volume or 'N/A'} | "
-            f"IV: {f'{snapshot.implied_volatility:.2%}' if snapshot.implied_volatility else 'N/A'} | "
-            # f"Greeks: {snapshot.greeks or 'N/A'} | "
-            f"DayOpen: {f'${snapshot.day.open:.2f}' if snapshot.day.open else 'N/A'} | "
-            f"DayClose: {f'${snapshot.day.close:.2f}' if snapshot.day.close else 'N/A'} | "
-            f"Day Price Change: {f'{snapshot.day.change_percent:.2f}%' if snapshot.day.change_percent else 'N/A'} | "
-            f"Last Updated: {snapshot.day.last_updated or 'N/A'}"
+    async def get_contract_snapshot_async(
+        self, underlying_asset: str, option_ticker_name: str
+    ) -> OptionContractSnapshot:
+        url = f"https://api.polygon.io/v3/snapshot/options/{underlying_asset}/{option_ticker_name}?apiKey={self.api_key}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return OptionContractSnapshot.from_dict(response.json().get("results"))
+
+
+async def fetch_snapshots_batch(contracts, underlying_asset):
+    option_fetcher = Core(UNDERLYING_ASSET)
+
+    tasks = [
+        option_fetcher.get_contract_snapshot_async(underlying_asset, contract.ticker)
+        for contract in contracts
+    ]
+
+    return await asyncio.gather(*tasks)
+
+
+def get_contract_within_price_range(
+    contracts: list[OptionsContract],
+    price_range: tuple[float, float],
+    year_range: tuple[int, int] = None,
+) -> list[OptionContractSnapshot]:
+    min_price, max_price = price_range
+    start_year, end_year = year_range if year_range else (None, None)
+    return [
+        contract
+        for contract in contracts
+        if min_price <= contract.strike_price <= max_price
+        and (
+            parse_option_symbol(contract.ticker, UNDERLYING_ASSET).expiration.year >= start_year
+            if start_year
+            else True
         )
+        and (
+            parse_option_symbol(contract.ticker, UNDERLYING_ASSET).expiration.year <= end_year
+            if end_year
+            else True
+        )
+    ]
+
+
+async def process_contract_and_snapshot(contract, snapshot):
+    await process_option_contracts(db, contract)
+    await process_option_snapshot(db, contract.ticker, snapshot)
 
 
 async def main():
+    await db.connect()
+    try:
+        core = Core(UNDERLYING_ASSET)
+        calls = core.get_call_contracts_sync()
+        puts = core.get_put_contracts_sync()
 
-    option_fetcher = OptionFetcher(ASSET)
-    contracts = option_fetcher.get_contracts()
-    print(f"Total contracts found: {len(contracts)}")
+        contracts = calls + puts
+        Log.info(f"Total contracts found: {len(contracts)}")
 
-    contracts_within_range = option_fetcher.get_contract_within_price_range(
-        contracts, PRICE_RANGE, YEAR_RANGE
-    )
+        contracts_within_range = get_contract_within_price_range(contracts, PRICE_RANGE, YEAR_RANGE)
 
-    print(f"Contracts within price range: {len(contracts_within_range)}")
+        Log.info(f"Contracts within price range: {len(contracts_within_range)}")
 
-    for contract in contracts_within_range[:LIMIT]:
-        db_contract = await process_option_contract(contract)
-        print(f"Upserted contract: {db_contract.ticker}")
+        snapshots = await fetch_snapshots_batch(contracts_within_range, UNDERLYING_ASSET)
 
-        snapshot = option_fetcher.get_contract_snapshot(
-            contract.underlying_ticker, contract.ticker
+        await asyncio.gather(
+            *[
+                process_contract_and_snapshot(contract, snapshot)
+                for contract, snapshot in zip(contracts_within_range, snapshots)
+            ]
         )
-        db_snapshot = await process_option_snapshot(contract.ticker, snapshot)
-        print(f"Added snapshot for {contract.ticker}: OI={db_snapshot.open_interest}")
-
-        print(option_fetcher.format_snapshot(contract, snapshot))
-        print("-" * 80)
+    finally:
+        await db.disconnect()
 
 
 if __name__ == "__main__":
-    import asyncio
-
     asyncio.run(main())

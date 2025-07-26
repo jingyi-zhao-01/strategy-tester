@@ -1,0 +1,3 @@
+[MASTER]
+disable=missing-docstring
+ignore=tests,migrations,__pycache__,venv

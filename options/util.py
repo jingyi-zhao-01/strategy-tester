@@ -1,12 +1,66 @@
-import pytz
 import os
 from datetime import datetime
-from polygon import RESTClient
+
+import pytz
 from dotenv import load_dotenv
+from models import OptionContractSnapshot
 from models.option_models import OptionSymbol
+from polygon import RESTClient
 
 # Load environment variables from .env file
 load_dotenv()
+
+TIME_ZONE = "America/New_York"
+
+
+def ns_to_datetime(
+    ns: int,
+) -> datetime:
+    nyc_tz = pytz.timezone(TIME_ZONE)
+    # First convert to UTC
+    utc_dt = datetime.fromtimestamp(ns / 1e9, tz=pytz.UTC)
+    # Then convert to NYC timezone
+    return utc_dt.astimezone(nyc_tz)
+
+
+def expiration_date_to_datetime(expiration_date: str) -> datetime:
+    year, month, day = map(int, expiration_date.split("-"))
+    return datetime(year, month, day, tzinfo=pytz.timezone(TIME_ZONE))
+
+
+def get_current_datetime(granularity: str = "second") -> datetime:
+    """Get the current datetime in NYC timezone with specified granularity.
+
+    Args:
+    ----
+        granularity (str, optional): Time granularity.
+            Options: "year", "month", "day", "hour", "minute", "second".
+            Defaults to "second".
+
+    Returns:
+    -------
+        datetime: Current datetime in NYC timezone with specified granularity
+
+    """
+    nyc_tz = pytz.timezone(TIME_ZONE)
+    now = datetime.now(nyc_tz)
+
+    if granularity == "year":
+        return now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif granularity == "month":
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif granularity == "day":
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif granularity == "hour":
+        return now.replace(minute=0, second=0, microsecond=0)
+    elif granularity == "minute":
+        return now.replace(second=0, microsecond=0)
+    elif granularity == "second":
+        return now
+    else:
+        raise ValueError(
+            "Invalid granularity. Choose from 'year', 'month', 'day', 'hour', 'minute', 'second'."
+        )
 
 
 def convert_to_nyc_time(timestamp_ms):
@@ -22,15 +76,12 @@ def convert_to_nyc_time(timestamp_ms):
 
 def convert_to_nyc_time_ns(timestamp_ns):
     nyc_tz = pytz.timezone("America/New_York")
-    utc_dt = datetime.utcfromtimestamp(timestamp_ns / 1_000_000_000).replace(
-        tzinfo=pytz.utc
-    )
+    utc_dt = datetime.utcfromtimestamp(timestamp_ns / 1_000_000_000).replace(tzinfo=pytz.utc)
     nyc_dt = utc_dt.astimezone(nyc_tz)
     return nyc_dt.strftime("%y-%m-%d-%H-%M")
 
 
 def get_polygon_client():
-
     api_key = os.getenv("POLYGON_API_KEY")
     if not api_key:
         raise ValueError(
@@ -40,7 +91,6 @@ def get_polygon_client():
 
 
 def parse_option_symbol(symbol: str, underlying_asset: str) -> OptionSymbol:
-
     # Remove option prefix if present
     clean_symbol = symbol.replace("O:", "")
     date_start_idx = len(underlying_asset)
@@ -65,4 +115,22 @@ def parse_option_symbol(symbol: str, underlying_asset: str) -> OptionSymbol:
         expiration=datetime(year, month, day),
         contract_type=contract_type,
         strike=strike,
+    )
+
+
+def format_snapshot(contract_ticker: str, snapshot: OptionContractSnapshot) -> str:
+    iv = f"{snapshot.implied_volatility:.2%}" if snapshot.implied_volatility else "N/A"
+    day_open = f"${snapshot.day.open:.2f}" if snapshot.day.open else "N/A"
+    day_close = f"${snapshot.day.close:.2f}" if snapshot.day.close else "N/A"
+    day_change = f"{snapshot.day.change_percent:.2f}%" if snapshot.day.change_percent else "N/A"
+    return (
+        f"Ticker: {contract_ticker} | "
+        f"OI: {snapshot.open_interest or 'N/A'} | "
+        f"Day Volume: {snapshot.day.volume or 'N/A'} | "
+        f"IV: {iv} | "
+        # f"Greeks: {snapshot.greeks or 'N/A'} | "
+        f"DayOpen: {day_open} | "
+        f"DayClose: {day_close} | "
+        f"Day Price Change: {day_change} | "
+        f"Last Updated: {snapshot.day.last_updated or 'N/A'}"
     )
