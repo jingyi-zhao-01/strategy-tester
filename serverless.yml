@@ -7,7 +7,7 @@ provider:
   runtime: python3.9
   region: us-east-1
   environment:
-    DATABASE_URL: postgresql://neondb_owner:npg_w0AHLZnyOIp3@ep-flat-shape-ad1kygjc-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+    DATABASE_URL: ${env:DATABASE_URL}
     POLYGON_API_KEY: ${env:POLYGON_API_KEY}
 
 functions:
