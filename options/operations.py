@@ -1,6 +1,7 @@
 from log import Log
 from models import OptionContractSnapshot, OptionsContract
 from prisma import Prisma
+from prisma.errors import UniqueViolationError
 from prisma.models import Options, OptionSnapshot
 from util import (
     expiration_date_to_datetime,
@@ -46,10 +47,7 @@ async def upsert_option_contract(database: Prisma, contract: OptionsContract) ->
     )
 
 
-# TODO: replace with INSERT
-
-
-async def upsert_option_snapshot(
+async def insert_option_snapshot(
     database: Prisma, contract_ticker: str, snapshot: OptionContractSnapshot
 ) -> OptionSnapshot:
     """Upsert an option snapshot into the database.
@@ -62,58 +60,39 @@ async def upsert_option_snapshot(
 
     try:
         if last_updated_dt is None:
-            raise ContractNotActiveError("last_updated is required for upsert_option_snapshot")
+            raise ContractNotActiveError("last_updated is required for insert_option_snapshot")
 
-        result = await database.optionsnapshot.upsert(
-            where={
-                "ticker_last_updated": {
-                    "ticker": contract_ticker,
-                    "last_updated": last_updated_dt,
-                }
-            },
+        result = await database.optionsnapshot.create(
             data={
-                "create": {
-                    "open_interest": snapshot.open_interest,
-                    "volume": snapshot.day.volume if snapshot.day else None,
-                    "implied_vol": snapshot.implied_volatility,
-                    "last_price": snapshot.day.close if snapshot.day else None,
-                    "last_updated": last_updated_dt,
-                    "last_crawled": curr_datetime,
-                    "day_open": snapshot.day.open if snapshot.day else None,
-                    "day_close": snapshot.day.close if snapshot.day else None,
-                    "day_change": snapshot.day.change_percent if snapshot.day else None,
-                    "option": {"connect": {"ticker": contract_ticker}},
-                },
-                "update": {
-                    "open_interest": snapshot.open_interest,
-                    "volume": snapshot.day.volume if snapshot.day else None,
-                    "implied_vol": snapshot.implied_volatility,
-                    "last_price": snapshot.day.close if snapshot.day else None,
-                    "last_updated": last_updated_dt,
-                    "last_crawled": curr_datetime,
-                    "day_open": snapshot.day.open if snapshot.day else None,
-                    "day_close": snapshot.day.close if snapshot.day else None,
-                    "day_change": snapshot.day.change_percent if snapshot.day else None,
-                    "option": {"connect": {"ticker": contract_ticker}},
-                },
-            },
+                "open_interest": snapshot.open_interest,
+                "volume": snapshot.day.volume if snapshot.day else None,
+                "implied_vol": snapshot.implied_volatility,
+                "last_price": snapshot.day.close if snapshot.day else None,
+                "last_updated": last_updated_dt,
+                "last_crawled": curr_datetime,
+                "day_open": snapshot.day.open if snapshot.day else None,
+                "day_close": snapshot.day.close if snapshot.day else None,
+                "day_change": snapshot.day.change_percent if snapshot.day else None,
+                "option": {"connect": {"ticker": contract_ticker}},
+            }
         )
 
         Log.info(
-            f"{curr_datetime} Added snapshot for {contract_ticker}: OI={snapshot.open_interest}"
+            f"{curr_datetime} Inserted snapshot for {contract_ticker}: OI={snapshot.open_interest}"
         )
         Log.info(format_snapshot(contract_ticker, snapshot))
 
         return result
+    except UniqueViolationError:
+        Log.warn(f"{contract_ticker} at {last_updated_dt} has no new update on snapshot")
     except ContractNotActiveError as e:
         Log.warn(
             f"{curr_datetime}"
-            f"{contract_ticker} is not active, Skipping upserting option snapshot: {e}"
+            f"{contract_ticker} is not active, Skipping inserting option snapshot: {e}"
         )
-
     except Exception as e:
         Log.error(
-            f"{curr_datetime} Error upserting option snapshot for "
+            f"{curr_datetime} Error inserting option snapshot for "
             f"{contract_ticker} at {last_updated_dt}: {e}"
         )
 
@@ -125,4 +104,4 @@ async def process_option_contracts(database: Prisma, contract: OptionsContract) 
 async def process_option_snapshot(
     database: Prisma, contract_ticker: str, snapshot: OptionContractSnapshot
 ) -> OptionSnapshot:
-    return await upsert_option_snapshot(database, contract_ticker, snapshot)
+    return await insert_option_snapshot(database, contract_ticker, snapshot)

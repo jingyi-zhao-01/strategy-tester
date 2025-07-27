@@ -8,7 +8,7 @@ from operations import db, process_option_contracts, process_option_snapshot
 from polygon import RESTClient
 from util import parse_option_symbol
 
-LIMIT = 5
+# LIMIT = 5
 
 # ASSET = "SE"
 # LIMIT = 100
