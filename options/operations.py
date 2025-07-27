@@ -1,7 +1,7 @@
 from log import Log
 from models import OptionContractSnapshot, OptionsContract
 from prisma import Prisma
-from prisma.errors import UniqueViolationError
+from prisma.errors import UniqueViolationError, ClientAlreadyRegisteredError
 from prisma.models import Options, OptionSnapshot
 from util import (
     expiration_date_to_datetime,
@@ -10,7 +10,10 @@ from util import (
     ns_to_datetime,
 )
 
-db = Prisma(auto_register=True)
+try:
+    db = Prisma(auto_register=True)
+except ClientAlreadyRegisteredError:
+    db = Prisma()
 
 
 # TODO: Upsert Bulk ?

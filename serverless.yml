@@ -1,0 +1,37 @@
+service: strategy-tester
+
+frameworkVersion: '*'
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: us-east-1
+  environment:
+    DATABASE_URL: postgresql://neondb_owner:npg_w0AHLZnyOIp3@ep-flat-shape-ad1kygjc-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+    POLYGON_API_KEY: 1TxWblBP3vePJcP2O84xMNFxvp25tYA7
+
+functions:
+  processOptions:
+    handler: handler.lambda_handler
+    timeout: 300 # 5 minutes
+    memorySize: 512
+    events:
+      - schedule: rate(1 day) # Run once per day
+      - http:
+          path: process-options
+          method: get
+
+plugins:
+  - serverless-python-requirements
+  - serverless-offline
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
+    slim: true
+    noDeploy:
+      - pytest
+      - pytest-cov
+  serverless-offline:
+    httpPort: 12000
+    lambdaPort: 12001
