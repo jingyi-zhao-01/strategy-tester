@@ -1,0 +1,28 @@
+{
+  "name": "strategy-tester",
+  "version": "1.0.0",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "local": "python local_test.py"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jingyi-zhao-01/strategy-tester.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jingyi-zhao-01/strategy-tester/issues"
+  },
+  "homepage": "https://github.com/jingyi-zhao-01/strategy-tester#readme",
+  "description": "Lambda function for processing options data",
+  "devDependencies": {
+    "serverless-offline": "^14.4.0",
+    "serverless-python-requirements": "^6.1.2"
+  }
+}

@@ -3,7 +3,29 @@
 *.pyd
 .vscode/
 .env
+.env*
 .ruff_cache/
 .venv/
 __pycache__/
 *.log
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Serverless
+.serverless/
+.webpack/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Misc
+.DS_Store
+.coverage
+htmlcov/
+.pytest_cache/
