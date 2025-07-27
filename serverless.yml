@@ -8,7 +8,7 @@ provider:
   region: us-east-1
   environment:
     DATABASE_URL: postgresql://neondb_owner:npg_w0AHLZnyOIp3@ep-flat-shape-ad1kygjc-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
-    POLYGON_API_KEY: 1TxWblBP3vePJcP2O84xMNFxvp25tYA7
+    POLYGON_API_KEY: ${env:POLYGON_API_KEY}
 
 functions:
   processOptions:
