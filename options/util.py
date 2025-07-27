@@ -3,9 +3,10 @@ from datetime import datetime
 
 import pytz
 from dotenv import load_dotenv
-from models import OptionContractSnapshot
-from models.option_models import OptionSymbol
 from polygon import RESTClient
+
+from options.models import OptionContractSnapshot
+from options.models.option_models import OptionSymbol
 
 # Load environment variables from .env file
 load_dotenv()

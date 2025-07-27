@@ -22,6 +22,8 @@
   "homepage": "https://github.com/jingyi-zhao-01/strategy-tester#readme",
   "description": "Lambda function for processing options data",
   "devDependencies": {
+    "serverless": "^4.17.2",
+    "serverless-dotenv-plugin": "^6.0.0",
     "serverless-offline": "^14.4.0",
     "serverless-python-requirements": "^6.1.2"
   }

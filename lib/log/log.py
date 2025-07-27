@@ -23,15 +23,18 @@ log_dir = project_root / "log"
 log_dir.mkdir(exist_ok=True)
 log_file_path = log_dir / "app.log"
 
-# File handler (absolute path)
-file_handler = logging.FileHandler(str(log_file_path))
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
 
-# Console handler
-console_handler = logging.StreamHandler()
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+# Add handlers only if none exist
+if not logger.hasHandlers():
+    # File handler (absolute path)
+    file_handler = logging.FileHandler(str(log_file_path))
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # Console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
 
 class Log:

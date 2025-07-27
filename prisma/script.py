@@ -1,4 +1,6 @@
 import asyncio
+
+from lib.log.log import Log
 from prisma import Prisma
 from prisma.models import User
 
@@ -16,7 +18,7 @@ async def main() -> None:
     )
 
     await db.disconnect()
-    print(f"User created: {user.name} with email {user.email}")
+    Log(f"User created: {user.name} with email {user.email}")
 
 
 if __name__ == "__main__":

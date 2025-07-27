@@ -2,6 +2,7 @@
 *.pyo
 *.pyd
 .vscode/
+.env.*
 .env
 .env*
 .ruff_cache/
