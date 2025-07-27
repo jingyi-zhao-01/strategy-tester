@@ -2,34 +2,13 @@ import asyncio
 import os
 
 import httpx
-from log import Log
-from models import OptionContractSnapshot, OptionsContract
-from operations import db, process_option_contracts, process_option_snapshot
 from polygon import RESTClient
-from util import parse_option_symbol
 
-# LIMIT = 5
+from lib import Log
 
-# ASSET = "SE"
-# LIMIT = 100
-# PRICE_RANGE = (140, 200)
-# YEAR_RANGE = (2025, 2025)
-
-
-UNDERLYING_ASSET = "NBIS"
-PRICE_RANGE = (40, 70)
-YEAR_RANGE = (2025, 2025)
-
-
-# ASSET = "HOOD"
-# PRICE_RANGE = (100, 150)
-# YEAR_RANGE = (2025, 2025)
-
-
-# ASSET = "FCX"
-# PRICE_RANGE = (45, 50)
-# YEAR_RANGE = (2025, 2025)
-
+from .models import OptionContractSnapshot, OptionsContract
+from .operations import db, process_option_contracts, process_option_snapshot
+from .util import parse_option_symbol
 
 # TODO: Open Interest vs expiration date vs strike price
 
@@ -84,7 +63,7 @@ class Core:
 
 
 async def fetch_snapshots_batch(contracts, underlying_asset):
-    option_fetcher = Core(UNDERLYING_ASSET)
+    option_fetcher = Core(underlying_asset)
 
     tasks = [
         option_fetcher.get_contract_snapshot_async(underlying_asset, contract.ticker)
@@ -106,48 +85,99 @@ def get_contract_within_price_range(
         for contract in contracts
         if min_price <= contract.strike_price <= max_price
         and (
-            parse_option_symbol(contract.ticker, UNDERLYING_ASSET).expiration.year >= start_year
+            parse_option_symbol(contract.ticker, contract.underlying_ticker).expiration.year
+            >= start_year
             if start_year
             else True
         )
         and (
-            parse_option_symbol(contract.ticker, UNDERLYING_ASSET).expiration.year <= end_year
+            parse_option_symbol(contract.ticker, contract.underlying_ticker).expiration.year
+            <= end_year
             if end_year
             else True
         )
     ]
 
 
-async def process_contract_and_snapshot(contract, snapshot):
-    await process_option_contracts(db, contract)
-    await process_option_snapshot(db, contract.ticker, snapshot)
-
-
-async def main():
+async def ingest_options(
+    underlying_asset: str, price_range: tuple[float, float], year_range: tuple[int, int]
+):
     await db.connect()
     try:
-        core = Core(UNDERLYING_ASSET)
+        core = Core(underlying_asset)
         calls = core.get_call_contracts_sync()
         puts = core.get_put_contracts_sync()
 
         contracts = calls + puts
         Log.info(f"Total contracts found: {len(contracts)}")
 
-        contracts_within_range = get_contract_within_price_range(contracts, PRICE_RANGE, YEAR_RANGE)
-
+        contracts_within_range = get_contract_within_price_range(contracts, price_range, year_range)
         Log.info(f"Contracts within price range: {len(contracts_within_range)}")
 
-        snapshots = await fetch_snapshots_batch(contracts_within_range, UNDERLYING_ASSET)
+        # Only process contracts, no snapshots
+        await asyncio.gather(
+            *[process_option_contracts(db, contract) for contract in contracts_within_range]
+        )
+        Log.info("All contracts processed successfully")
+    except Exception as e:
+        Log.error(f"Error during options ingestion: {e}")
+        raise e
+    finally:
+        await db.disconnect()
+
+
+async def ingest_option_snapshots(
+    underlying_asset: str, price_range: tuple[float, float], year_range: tuple[int, int]
+):
+    await db.connect()
+    try:
+        core = Core(underlying_asset)
+        calls = core.get_call_contracts_sync()
+        puts = core.get_put_contracts_sync()
+
+        contracts = calls + puts
+        contracts_within_range = get_contract_within_price_range(contracts, price_range, year_range)
+        Log.info(f"Contracts within price range: {len(contracts_within_range)}")
+
+        snapshots = await fetch_snapshots_batch(contracts_within_range, underlying_asset)
 
         await asyncio.gather(
             *[
-                process_contract_and_snapshot(contract, snapshot)
+                process_option_snapshot(db, contract.ticker, snapshot)
                 for contract, snapshot in zip(contracts_within_range, snapshots)
             ]
         )
+
+        Log.info("All option snapshots processed successfully")
+
+    except Exception as e:
+        Log.error(f"Error during option snapshots ingestion: {e}")
+        raise e
     finally:
         await db.disconnect()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    LIMIT = 5
+
+    ASSET = "SE"
+    LIMIT = 100
+    PRICE_RANGE = (140, 200)
+    YEAR_RANGE = (2025, 2025)
+
+    UNDERLYING_ASSET = "NBIS"
+    PRICE_RANGE = (40, 70)
+    YEAR_RANGE = (2025, 2025)
+
+    ASSET = "HOOD"
+    PRICE_RANGE = (100, 150)
+    YEAR_RANGE = (2025, 2025)
+
+    ASSET = "FCX"
+    PRICE_RANGE = (45, 50)
+    YEAR_RANGE = (2025, 2025)
+    asyncio.run(ingest_options(UNDERLYING_ASSET, PRICE_RANGE, YEAR_RANGE))
+    # asyncio.run(ingest_option_snapshots(UNDERLYING_ASSET, PRICE_RANGE, YEAR_RANGE))
+
+
+__all__ = ["ingest_options", "ingest_option_snapshots"]

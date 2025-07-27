@@ -1,25 +1,14 @@
+org: zhaoelton
+app: option-flow
 service: strategy-tester
-
-frameworkVersion: '*'
 
 provider:
   name: aws
-  runtime: python3.9
+  runtime: python3.12
   region: us-east-1
   environment:
     DATABASE_URL: ${env:DATABASE_URL}
     POLYGON_API_KEY: ${env:POLYGON_API_KEY}
-
-functions:
-  processOptions:
-    handler: handler.lambda_handler
-    timeout: 300 # 5 minutes
-    memorySize: 512
-    events:
-      - schedule: rate(1 day) # Run once per day
-      - http:
-          path: process-options
-          method: get
 
 plugins:
   - serverless-python-requirements
@@ -35,3 +24,33 @@ custom:
   serverless-offline:
     httpPort: 12000
     lambdaPort: 12001
+  dotenv:
+    path: .env.${opt:stage, 'dev'}
+  
+
+functions:
+  ingestOptions:
+    handler: lambda_handler.ingest_options_handler
+    timeout: 300 # 5 minutes
+    memorySize: 512
+    events:
+      - schedule: rate(1 day) # Run once per day
+      - http:
+          path: process-options
+          method: get
+  ingestOptionsSnapShot:
+    handler: lambda_handler.ingest_option_snapshots_handler
+    timeout: 300 # 5 minutes
+    memorySize: 512
+    events:
+      - schedule: rate(1 day) # Run once per day
+      - http:
+          path: process-options-snapshot
+          method: get
+
+  ping:
+    handler: lambda_handler.ping
+    timeout: 10 # 10 seconds
+    memorySize: 128
+    events:
+      - http:
