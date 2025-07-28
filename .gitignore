@@ -9,14 +9,21 @@
 .venv/
 __pycache__/
 *.log
+/generated/prisma
+
+
+# AWS SAM build artifacts
+.aws-sam/
 
 # Node.js
 node_modules/
 npm-debug.log
 yarn-debug.log
 yarn-error.log
+package-lock.json
+pnpm-lock.yaml
 
-# Serverless
+# Serverless (legacy - can be removed)
 .serverless/
 .webpack/
 

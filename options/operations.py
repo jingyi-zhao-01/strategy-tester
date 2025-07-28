@@ -37,6 +37,13 @@ async def get_all_option_contracts(database: Prisma) -> list[Options]:
 async def upsert_option_contract(database: Prisma, contract: OptionsContract) -> Options:
     expiration_dt = expiration_date_to_datetime(contract.expiration_date)
 
+    Log.info(
+        f"Upserting contract: {contract.ticker}, "
+        f"Strike: {contract.strike_price}, "
+        f"Expiration: {expiration_dt}, "
+        f"Type: {contract.contract_type}"
+    )
+
     return await Options.prisma().upsert(
         where={
             "ticker": contract.ticker,

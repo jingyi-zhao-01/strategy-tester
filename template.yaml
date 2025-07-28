@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Strategy Tester SAM Application
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 512
+    Runtime: python3.12
+    Environment:
+      Variables:
+        DATABASE_URL: !Ref DatabaseUrl
+        POLYGON_API_KEY: !Ref PolygonApiKey
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    Description: Database connection URL
+    Default: ""
+  PolygonApiKey:
+    Type: String
+    Description: Polygon API key
+    Default: ""
+
+Resources:
+  IngestOptionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_handler.ingest_options_handler
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+        Api:
+          Type: Api
+          Properties:
+            Path: /process-options
+            Method: get
+
+  IngestSnapshotsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_handler.ingest_option_snapshots_handler
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 day)
+        Api:
+          Type: Api
+          Properties:
+            Path: /process-options-snapshot
+            Method: get
+
+  PingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Handler: lambda_handler.ping
+      Timeout: 10
+      MemorySize: 128
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /ping
+            Method: get
+
+Outputs:
+  ApiGatewayUrl:
+    Description: "API Gateway endpoint URL"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  IngestOptionsFunction:
+    Description: "Ingest Options Lambda Function ARN"
+    Value: !GetAtt IngestOptionsFunction.Arn
+  IngestSnapshotsFunction:
+    Description: "Ingest Snapshots Lambda Function ARN"
+    Value: !GetAtt IngestSnapshotsFunction.Arn

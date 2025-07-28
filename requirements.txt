@@ -1,7 +1,5 @@
 httpx==0.28.1
+polygon-api-client==1.15.1
 prisma==0.15.0
-asyncio==3.4.3
+pytz==2025.2
 python-dotenv==1.1.1
-boto3==1.37.3
-botocore==1.37.3
-polygon-api-client==1.15.3

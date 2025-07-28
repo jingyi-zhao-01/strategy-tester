@@ -1,30 +1,20 @@
 import asyncio
 import json
 
-from options.ingestor import ingest_option_snapshots, ingest_options
+from lib.log.log import Log
+from options import ingestor
+from options.models import OptionIngestParams
 
 # Add the project directory to the Python path
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "options"))
 
-# Import the main function from options/main.py
 
-
-# def lambda_handler(event, context):
-#     try:
-#         # # Run the setup and main async functions
-#         # asyncio.run(main())
-#         return {
-#             "statusCode": 200,
-#             "body": json.dumps({"message": "Options processing completed successfully"}),
-#         }
-#     except Exception as e:
-#         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
-
-
-UNDERLYING_ASSET = "NBIS"
-PRICE_RANGE = (40, 70)
-YEAR_RANGE = (2025, 2025)
+# Replace TARGETS with a list of OptionIngestParams instances
+TARGETS = [
+    OptionIngestParams("NBIS", (40, 70), (2025, 2025)),
+    OptionIngestParams("SE", (140, 200), (2025, 2025)),
+]
 
 
 def ping(event, context):
@@ -37,28 +27,33 @@ def ping(event, context):
 
 def ingest_options_handler(event, context):
     try:
-        asyncio.run(
-            ingest_options(
-                underlying_asset=UNDERLYING_ASSET,
-                price_range=PRICE_RANGE,
-                year_range=YEAR_RANGE,
-            )
-        )
+        asyncio.run(ingestor.ingest_options(TARGETS))
         return {
             "statusCode": 200,
             "body": json.dumps({"message": "Options ingestion completed successfully"}),
         }
     except Exception as e:
+        Log.error(f"Error during options ingestion: {e}")
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
 
 def ingest_option_snapshots_handler(event, context):
     try:
-        asyncio.run(ingest_option_snapshots())
+        asyncio.run(ingestor.ingest_option_snapshots())
         return {
             "statusCode": 200,
             "body": json.dumps({"message": "Option snapshots ingestion completed successfully"}),
         }
+    except Exception as e:
+        Log.error(f"Error during option snapshots ingestion: {e}")
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+
+
+# TODO implement Migration to Athena
+def migrate_expired_options_handler(event, context):
+    try:
+        raise NotImplementedError("Expired options migration is not implemented yet.")
+
     except Exception as e:
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 

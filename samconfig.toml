@@ -1,0 +1,19 @@
+version = 0.1
+
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "strategy-tester"
+s3_bucket = ""  # You'll need to set this to your SAM deployment bucket
+s3_prefix = "strategy-tester"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = [
+    "DatabaseUrl=",  # Set your database URL here
+    "PolygonApiKey="  # Set your Polygon API key here
+]
+
+[default.build]
+[default.build.parameters]
+use_container = false
