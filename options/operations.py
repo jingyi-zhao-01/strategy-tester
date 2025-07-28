@@ -22,6 +22,17 @@ class ContractNotActiveError(Exception):
     pass
 
 
+async def get_all_option_contracts(database: Prisma) -> list[Options]:
+    """Fetch all option contracts from the database."""
+    try:
+        contracts = await Options.prisma().find_many()
+        Log.info(f"Retrieved {len(contracts)} option contracts from the database.")
+        return contracts
+    except Exception as e:
+        Log.error(f"Error fetching option contracts: {e}")
+        return []
+
+
 # TODO: replace with INSERT
 async def upsert_option_contract(database: Prisma, contract: OptionsContract) -> Options:
     expiration_dt = expiration_date_to_datetime(contract.expiration_date)
@@ -106,3 +117,17 @@ async def process_option_snapshot(
     database: Prisma, contract_ticker: str, snapshot: OptionContractSnapshot
 ) -> OptionSnapshot:
     return await insert_option_snapshot(database, contract_ticker, snapshot)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    async def main():
+        await db.connect()
+        contracts = await get_all_option_contracts(db)
+        for contract in contracts:
+            Log.info(f"Processing contract: {contract.ticker}")
+
+        await db.disconnect()
+
+    asyncio.run(main())

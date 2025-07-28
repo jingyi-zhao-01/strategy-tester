@@ -54,13 +54,7 @@ def ingest_options_handler(event, context):
 
 def ingest_option_snapshots_handler(event, context):
     try:
-        asyncio.run(
-            ingest_option_snapshots(
-                underlying_asset=UNDERLYING_ASSET,
-                price_range=PRICE_RANGE,
-                year_range=YEAR_RANGE,
-            )
-        )
+        asyncio.run(ingest_option_snapshots())
         return {
             "statusCode": 200,
             "body": json.dumps({"message": "Option snapshots ingestion completed successfully"}),

@@ -34,19 +34,19 @@ functions:
     timeout: 300 # 5 minutes
     memorySize: 512
     events:
-      - schedule: rate(1 day) # Run once per day
-      - http:
-          path: process-options
-          method: get
+      - schedule: cron(0 4 ? * TUE-SAT *)
+      # - http:
+      #     path: process-options
+      #     method: get
   ingestOptionsSnapShot:
     handler: lambda_handler.ingest_option_snapshots_handler
     timeout: 300 # 5 minutes
     memorySize: 512
     events:
-      - schedule: rate(1 day) # Run once per day
-      - http:
-          path: process-options-snapshot
-          method: get
+      - schedule: cron(0 5 ? * TUE-SAT *)
+      # - http:
+      #     path: process-options-snapshot
+      #     method: get
 
   ping:
     handler: lambda_handler.ping

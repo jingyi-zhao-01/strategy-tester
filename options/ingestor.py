@@ -7,14 +7,19 @@ from polygon import RESTClient
 from lib import Log
 
 from .models import OptionContractSnapshot, OptionsContract
-from .operations import db, process_option_contracts, process_option_snapshot
+from .operations import (
+    db,
+    get_all_option_contracts,
+    process_option_contracts,
+    process_option_snapshot,
+)
 from .util import parse_option_symbol
 
 # TODO: Open Interest vs expiration date vs strike price
 
 
 class Core:
-    def __init__(self, asset: str):
+    def __init__(self, asset: str = None):
         self.asset = asset
         self.api_key = os.getenv("POLYGON_API_KEY")
         if not self.api_key:
@@ -62,11 +67,11 @@ class Core:
             return OptionContractSnapshot.from_dict(response.json().get("results"))
 
 
-async def fetch_snapshots_batch(contracts, underlying_asset):
-    option_fetcher = Core(underlying_asset)
+async def fetch_snapshots_batch(contracts: list[OptionsContract]) -> list[OptionContractSnapshot]:
+    option_fetcher = Core(None)
 
     tasks = [
-        option_fetcher.get_contract_snapshot_async(underlying_asset, contract.ticker)
+        option_fetcher.get_contract_snapshot_async(contract.underlying_ticker, contract.ticker)
         for contract in contracts
     ]
 
@@ -126,25 +131,26 @@ async def ingest_options(
         await db.disconnect()
 
 
-async def ingest_option_snapshots(
-    underlying_asset: str, price_range: tuple[float, float], year_range: tuple[int, int]
-):
+async def ingest_option_snapshots():
     await db.connect()
     try:
-        core = Core(underlying_asset)
-        calls = core.get_call_contracts_sync()
-        puts = core.get_put_contracts_sync()
+        # core = Core(underlying_asset)
+        # calls = core.get_call_contracts_sync()
+        # puts = core.get_put_contracts_sync()
 
-        contracts = calls + puts
-        contracts_within_range = get_contract_within_price_range(contracts, price_range, year_range)
-        Log.info(f"Contracts within price range: {len(contracts_within_range)}")
+        # contracts = calls + puts
 
-        snapshots = await fetch_snapshots_batch(contracts_within_range, underlying_asset)
+        contracts = await get_all_option_contracts(db)
+
+        # contracts_within_range = get_contract_within_price_range(contracts, None, None)
+        Log.info(f"Existing Contracts in database: {len(contracts)}")
+
+        snapshots = await fetch_snapshots_batch(contracts)
 
         await asyncio.gather(
             *[
                 process_option_snapshot(db, contract.ticker, snapshot)
-                for contract, snapshot in zip(contracts_within_range, snapshots)
+                for contract, snapshot in zip(contracts, snapshots)
             ]
         )
 
@@ -176,8 +182,8 @@ if __name__ == "__main__":
     ASSET = "FCX"
     PRICE_RANGE = (45, 50)
     YEAR_RANGE = (2025, 2025)
-    asyncio.run(ingest_options(UNDERLYING_ASSET, PRICE_RANGE, YEAR_RANGE))
-    # asyncio.run(ingest_option_snapshots(UNDERLYING_ASSET, PRICE_RANGE, YEAR_RANGE))
+    # asyncio.run(ingest_options(UNDERLYING_ASSET, PRICE_RANGE, YEAR_RANGE))
+    asyncio.run(ingest_option_snapshots())
 
 
 __all__ = ["ingest_options", "ingest_option_snapshots"]
