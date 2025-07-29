@@ -12,10 +12,10 @@ from options.models import OptionIngestParams
 
 # Replace TARGETS with a list of OptionIngestParams instances
 TARGETS = [
-    # OptionIngestParams("NBIS", (40, 70), (2025, 2025)),
-    # OptionIngestParams("SE", (140, 200), (2025, 2025)),
-    # OptionIngestParams("HOOD", (100, 150), (2025, 2025)),
-    # OptionIngestParams("NET", (185, 210), (2025, 2025)),
+    OptionIngestParams("NBIS", (40, 70), (2025, 2025)),
+    OptionIngestParams("SE", (140, 200), (2025, 2025)),
+    OptionIngestParams("HOOD", (100, 150), (2025, 2025)),
+    OptionIngestParams("NET", (185, 210), (2025, 2025)),
     OptionIngestParams("MU", (90, 150), (2025, 2026)),
     # OptionIngestParams("CRWV", (100, 120), (2025, 2025)),
 ]
@@ -63,5 +63,7 @@ def migrate_expired_options_handler(event, context):
 
 
 if __name__ == "__main__":
-    # ingest_options_handler(None, None)
+    Log.info("-----------Ingesting options...")
+    ingest_options_handler(None, None)
+    Log.info("-----------Ingesting option snapshots...")
     ingest_option_snapshots_handler(None, None)

@@ -31,7 +31,8 @@ class OptionTickerNeverActiveError(Exception):
 
 class OptionRetriever:
     def __init__(self, concurrency_limit=CONCURRENCY_LIMIT):
-        self.semaphore = asyncio.Semaphore(concurrency_limit)
+        # self.semaphore = asyncio.Semaphore(concurrency_limit)
+        pass
 
     # Deprecated:
     async def retrieve(self) -> list[Options]:
@@ -63,13 +64,29 @@ class OptionRetriever:
 
 option_retriever = OptionRetriever()
 
+# TODO: what is Semaphore
+# what is functional programming in python
+
+
+def with_semaphore(semaphore):
+    def wrapper(coro):
+        async def inner(*args, **kwargs):
+            async with semaphore:
+                return await coro(*args, **kwargs)
+
+        return inner
+
+    return wrapper
+
 
 class OptionIngestor:
     def __init__(self, concurrency_limit=CONCURRENCY_LIMIT):
-        self.semaphore = asyncio.Semaphore(concurrency_limit)
+        self.concurrency_limit = concurrency_limit
         self.ingest_time = get_current_datetime()
 
     async def ingest_options(self, underlying_assets: list[OptionIngestParams]):
+        semaphore = asyncio.Semaphore(self.concurrency_limit)
+        process_with_sema = with_semaphore(semaphore)(self._upsert_option_contract)
         await db.connect()
         try:
             for target in underlying_assets:
@@ -92,10 +109,7 @@ class OptionIngestor:
                 )
 
                 await asyncio.gather(
-                    *[
-                        self._process_option_contracts_with_semaphore(contract)
-                        for contract in contracts_within_range
-                    ]
+                    *[process_with_sema(contract) for contract in contracts_within_range]
                 )
                 Log.info(f"All contracts for {underlying_asset} processed successfully")
         except Exception as e:
@@ -105,6 +119,8 @@ class OptionIngestor:
             await db.disconnect()
 
     async def ingest_option_snapshots(self):
+        semaphore = asyncio.Semaphore(self.concurrency_limit)
+        process_with_sema = with_semaphore(semaphore)(self._insert_option_snapshot)
         await db.connect()
         try:
             total_contracts = 0
@@ -114,7 +130,7 @@ class OptionIngestor:
                 snapshots = await fetch_snapshots_batch(contracts_batch)
                 await asyncio.gather(
                     *[
-                        self._process_option_snapshot_with_semaphore(contract, snapshot)
+                        process_with_sema(contract.ticker, snapshot)
                         for contract, snapshot in zip(contracts_batch, snapshots)
                     ]
                 )
@@ -215,14 +231,6 @@ class OptionIngestor:
                     await asyncio.sleep(delay)
                 else:
                     raise
-
-    async def _process_option_contracts_with_semaphore(self, contract):
-        async with self.semaphore:
-            await self._upsert_option_contract(contract)
-
-    async def _process_option_snapshot_with_semaphore(self, contract, snapshot):
-        async with self.semaphore:
-            await self._insert_option_snapshot(contract.ticker, snapshot)
 
 
 if __name__ == "__main__":
