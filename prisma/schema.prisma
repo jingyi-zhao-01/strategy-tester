@@ -28,19 +28,24 @@ model Options {
 //TODO: Elimiate duplicate storage of ticker Key for efficient storage
 
 model OptionSnapshot {
-  id            Int       @id @default(autoincrement())
-  ticker        String
+  id            Int      @default(autoincrement())
+  optionId      Int
   volume        Float?
   day_change    Float?
   day_close     Float?
   day_open      Float?
   implied_vol   Float?
   last_price    Float?
-  last_updated  DateTime? @db.Timestamptz
-  last_crawled  DateTime  @db.Timestamptz
+  last_updated  DateTime @db.Timestamptz  // NOT NULL for TimescaleDB
+  last_crawled  DateTime @db.Timestamptz
   open_interest Int?
-  option        Options   @relation(fields: [ticker], references: [ticker])
+  option        Options  @relation(fields: [optionId], references: [id])
 
-  @@unique([ticker, last_updated])
+  // Primary key is now a composite of time column first, then optionId and id
+  @@id([last_updated, optionId, id])
+  
+  // No need for additional indexes as the primary key already covers this
   @@map("option_snapshots")
+  
+  // Note: This table is now a TimescaleDB hypertable partitioned by last_updated
 }
