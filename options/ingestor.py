@@ -23,6 +23,21 @@ CONCURRENCY_LIMIT = 250
 OPTION_BATCH_RETRIEVAL_SIZE = 500
 
 
+# TODO: what is Semaphore
+# what is functional programming in python
+
+
+def with_semaphore(semaphore):
+    def wrapper(coro):
+        async def inner(*args, **kwargs):
+            async with semaphore:
+                return await coro(*args, **kwargs)
+
+        return inner
+
+    return wrapper
+
+
 class OptionTickerNeverActiveError(Exception):
     """Base class for other exceptions."""
 
@@ -63,20 +78,6 @@ class OptionRetriever:
 
 
 option_retriever = OptionRetriever()
-
-# TODO: what is Semaphore
-# what is functional programming in python
-
-
-def with_semaphore(semaphore):
-    def wrapper(coro):
-        async def inner(*args, **kwargs):
-            async with semaphore:
-                return await coro(*args, **kwargs)
-
-        return inner
-
-    return wrapper
 
 
 class OptionIngestor:
@@ -216,7 +217,7 @@ class OptionIngestor:
                 Log.info(format_snapshot(contract_ticker, snapshot))
                 return result
             except UniqueViolationError:
-                Log.warn(f"{contract_ticker} at {last_updated_dt} has no new update on snapshot")
+                Log.info(f"{contract_ticker} at {last_updated_dt} has no new update on snapshot")
                 break
             except OptionTickerNeverActiveError:
                 Log.info(f"{contract_ticker} is not active")

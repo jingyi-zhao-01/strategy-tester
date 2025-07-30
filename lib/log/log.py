@@ -24,14 +24,14 @@ log_dir.mkdir(exist_ok=True)
 log_file_path = log_dir / "app.log"
 
 
-# Add handlers only if none exist
-if not logger.hasHandlers():
-    # File handler (absolute path)
+# Add file handler if not already present
+if not any(isinstance(h, logging.FileHandler) for h in logger.handlers):
     file_handler = logging.FileHandler(str(log_file_path))
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
-    # Console handler
+# Add console handler if not already present
+if not any(isinstance(h, logging.StreamHandler) for h in logger.handlers):
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)

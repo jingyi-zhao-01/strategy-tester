@@ -24,6 +24,9 @@ model Options {
   @@map("options")
 }
 
+
+//TODO: Elimiate duplicate storage of ticker Key for efficient storage
+
 model OptionSnapshot {
   id            Int       @id @default(autoincrement())
   ticker        String
