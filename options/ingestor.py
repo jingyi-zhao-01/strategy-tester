@@ -4,10 +4,10 @@ from collections.abc import AsyncGenerator
 from lib import Log
 from options.api.options import Core, fetch_snapshots_batch, get_contract_within_price_range
 from options.util import (
-    expiration_date_to_datetime,
     format_snapshot,
     get_current_datetime,
     ns_to_datetime,
+    option_expiration_date_to_datetime,
 )
 from prisma import Prisma
 from prisma.errors import UniqueViolationError
@@ -146,7 +146,7 @@ class OptionIngestor:
             await db.disconnect()
 
     async def _upsert_option_contract(self, contract: OptionsContract) -> Options:
-        expiration_dt = expiration_date_to_datetime(contract.expiration_date)
+        expiration_dt = option_expiration_date_to_datetime(contract.expiration_date)
         Log.info(
             f"Upserting contract: {contract.ticker}, "
             f"Strike: {contract.strike_price}, "

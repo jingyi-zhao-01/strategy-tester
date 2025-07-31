@@ -25,9 +25,11 @@ def ns_to_datetime(
     return utc_dt.astimezone(nyc_tz)
 
 
-def expiration_date_to_datetime(expiration_date: str) -> datetime:
+def option_expiration_date_to_datetime(expiration_date: str) -> datetime:
     year, month, day = map(int, expiration_date.split("-"))
-    return datetime(year, month, day, tzinfo=pytz.timezone(TIME_ZONE))
+    # Standard U.S. options expire at 11:59 PM ET (NYC time)
+    nyc_tz = pytz.timezone(TIME_ZONE)
+    return nyc_tz.localize(datetime(year, month, day, 23, 59, 0))
 
 
 def get_current_datetime(granularity: str = "second") -> datetime:
