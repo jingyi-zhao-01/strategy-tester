@@ -21,7 +21,7 @@ repos:
       # (removed redundant ruff lint local hook)
       - id: pytest-pre-push
         name: Run pytest with coverage on pre-push
-        entry: pytest --cov=options --cov=lib --cov-report=term-missing --cov-fail-under=50
+        entry: bash -c 'cd $(git rev-parse --show-toplevel) && pytest --cov=options --cov=lib --cov-report=term-missing --cov-fail-under=50 || (echo "\n[ERROR] Test failures detected during pre-push" >&2; exit 1)'
         language: system
         stages: [pre-push]
 

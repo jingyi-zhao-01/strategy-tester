@@ -3,3 +3,4 @@ polygon-api-client==1.15.1
 prisma==0.15.0
 pytz==2025.2
 python-dotenv==1.1.1
+pytest
