@@ -16,3 +16,14 @@ repos:
       
 
   
+  - repo: local
+    hooks:
+      # (removed redundant ruff lint local hook)
+      - id: pytest-pre-push
+        name: Run pytest with coverage on pre-push
+        entry: pytest --cov=options --cov=lib --cov-report=term-missing --cov-fail-under=50
+        language: system
+        stages: [pre-push]
+
+
+
