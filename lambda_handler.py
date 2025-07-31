@@ -22,6 +22,8 @@ TARGETS = [
     # ---
     OptionIngestParams("HOOD", (100, 150), (2025, 2025)),
     OptionIngestParams("CRWV", (100, 120), (2025, 2025)),
+    # Inactive
+    OptionIngestParams("FIG", (20, 100), (2025, 2025)),
 ]
 
 

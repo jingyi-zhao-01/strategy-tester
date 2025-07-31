@@ -100,6 +100,9 @@ class OptionIngestor:
 
                 contracts = calls + puts
                 Log.info(f"Total contracts found for {underlying_asset}: {len(contracts)}")
+                if not contracts:
+                    Log.warn(f"No contracts found for {underlying_asset}. Skipping...")
+                    continue
 
                 contracts_within_range = get_contract_within_price_range(
                     contracts, price_range, year_range
