@@ -101,7 +101,7 @@ class OptionIngestor:
                 contracts = calls + puts
                 Log.info(f"Total contracts found for {underlying_asset}: {len(contracts)}")
                 if not contracts:
-                    Log.warn(f"No contracts found for {underlying_asset}. Skipping...")
+                    Log.warn(f"No UnExpired contracts found for {underlying_asset}")
                     continue
 
                 contracts_within_range = get_contract_within_price_range(

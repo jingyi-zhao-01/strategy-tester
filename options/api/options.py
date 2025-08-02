@@ -4,8 +4,12 @@ import os
 import httpx
 from polygon import RESTClient
 
+from lib.log.log import Log
+
 from ..models import OptionContractSnapshot, OptionsContract
 from ..util import parse_option_symbol
+
+NOT_FOUND_STATUS_CODE = 404
 
 
 class Core:
@@ -46,15 +50,31 @@ class Core:
         snapshot = self.client.get_snapshot_option(underlying_asset, option_ticker_name)
         return snapshot
 
-    async def get_contract_snapshot_async(
+    async def fetch_daily_snapshot_async(
         self, underlying_asset: str, option_ticker_name: str
-    ) -> OptionContractSnapshot:
+    ) -> OptionContractSnapshot | None:
         url = f"https://api.polygon.io/v3/snapshot/options/{underlying_asset}/{option_ticker_name}?apiKey={self.api_key}"
 
         async with httpx.AsyncClient() as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            return OptionContractSnapshot.from_dict(response.json().get("results"))
+            try:
+                response = await client.get(url)
+                response.raise_for_status()
+                return OptionContractSnapshot.from_dict(response.json().get("results"))
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == NOT_FOUND_STATUS_CODE:
+                    Log.warn(
+                        f"Option not found or expired: {underlying_asset}/{option_ticker_name}"
+                        f"(URL: {url})"
+                    )
+                    return None
+                else:
+                    Log.error(
+                        f"HTTP error {exc.response.status_code}: {exc.response.text} | "
+                        f"underlying_asset={underlying_asset}, "
+                        f"option_ticker_name={option_ticker_name}, "
+                        f"url={url}"
+                    )
+                    return None  # or raise if you want to stop on other errors
 
 
 def get_contract_within_price_range(
@@ -87,8 +107,9 @@ async def fetch_snapshots_batch(contracts: list[OptionsContract]) -> list[Option
     option_fetcher = Core(None)
 
     tasks = [
-        option_fetcher.get_contract_snapshot_async(contract.underlying_ticker, contract.ticker)
+        option_fetcher.fetch_daily_snapshot_async(contract.underlying_ticker, contract.ticker)
         for contract in contracts
     ]
-
-    return await asyncio.gather(*tasks)
+    results = await asyncio.gather(*tasks)
+    # Filter out None results (expired/not found contracts)
+    return [snapshot for snapshot in results if snapshot is not None]
