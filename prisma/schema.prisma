@@ -1,8 +1,10 @@
 generator client {
   provider             = "prisma-client-py"
-  output               = "../generated/prisma"
-  recursive_type_depth = "5"
+  //TODO: why is this breaking my ORM
+  // https://github.com/prisma/prisma/discussions/25127
+  // output               = "../generated/prisma"
   interface            = "asyncio"
+  recursive_type_depth = "5"
 }
 
 datasource db {
