@@ -1,5 +1,10 @@
 import asyncio
+import sys
+import os
 from collections.abc import AsyncGenerator
+
+# Add the generated prisma client to the path
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'generated'))
 
 from lib import Log
 from options.api.options import Core, fetch_snapshots_batch, get_contract_within_price_range
@@ -194,14 +199,15 @@ class OptionIngestor:
         curr_datetime = self.ingest_time
         attempt = 0
 
-        # TODO: parse greeks fn
-
-        # greeks = {
-        #     "delta": snapshot.greeks.delta if snapshot.greeks else None,
-        #     "gamma": snapshot.greeks.gamma if snapshot.greeks else None,
-        #     "theta": snapshot.greeks.theta if snapshot.greeks else None,
-        #     "vega": snapshot.greeks.vega if snapshot.greeks else None,
-        # }
+        # Parse Greeks data
+        greeks = None
+        if snapshot.greeks:
+            greeks = {
+                "delta": snapshot.greeks.delta,
+                "gamma": snapshot.greeks.gamma,
+                "theta": snapshot.greeks.theta,
+                "vega": snapshot.greeks.vega,
+            }
 
         while attempt < max_retries:
             try:
@@ -217,7 +223,7 @@ class OptionIngestor:
                             "open_interest": snapshot.open_interest,
                             "volume": snapshot.day.volume if snapshot.day else None,
                             "implied_vol": snapshot.implied_volatility,
-                            # "greeks": None,
+                            "greeks": greeks,
                             "last_price": snapshot.day.close if snapshot.day else None,
                             "last_updated": last_updated_dt,
                             "last_crawled": curr_datetime,
@@ -230,7 +236,7 @@ class OptionIngestor:
                             "open_interest": snapshot.open_interest,
                             "volume": snapshot.day.volume if snapshot.day else None,
                             "implied_vol": snapshot.implied_volatility,
-                            # "greeks": None,
+                            "greeks": greeks,
                             "last_price": snapshot.day.close if snapshot.day else None,
                             "last_updated": last_updated_dt,
                             "last_crawled": curr_datetime,
