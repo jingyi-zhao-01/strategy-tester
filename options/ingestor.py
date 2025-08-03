@@ -16,11 +16,23 @@ from prisma.models import Options, OptionSnapshot
 from .models import OptionContractSnapshot, OptionIngestParams, OptionsContract
 
 db = Prisma(auto_register=True)
-
 # TODO: Open Interest vs expiration date vs strike price
 
 CONCURRENCY_LIMIT = 250
 OPTION_BATCH_RETRIEVAL_SIZE = 500
+semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+
+
+def bounded_db(func):
+    async def wrapper(*args, **kwargs):
+        # async with semaphore:
+        await db.connect()
+        try:
+            return await func(*args, **kwargs)
+        finally:
+            await db.disconnect()
+
+    return wrapper
 
 
 # TODO: what is Semaphore
@@ -85,68 +97,54 @@ class OptionIngestor:
         self.concurrency_limit = concurrency_limit
         self.ingest_time = get_current_datetime()
 
+    @bounded_db
     async def ingest_options(self, underlying_assets: list[OptionIngestParams]):
-        semaphore = asyncio.Semaphore(self.concurrency_limit)
         process_with_sema = with_semaphore(semaphore)(self._upsert_option_contract)
-        await db.connect()
-        try:
-            for target in underlying_assets:
-                underlying_asset = target.underlying_asset
-                price_range = target.price_range
-                year_range = target.year_range
-                core = Core(underlying_asset)
-                calls = core.get_call_contracts()
-                puts = core.get_put_contracts()
+        for target in underlying_assets:
+            underlying_asset = target.underlying_asset
+            price_range = target.price_range
+            year_range = target.year_range
+            core = Core(underlying_asset)
+            calls = core.get_call_contracts()
+            puts = core.get_put_contracts()
 
-                contracts = calls + puts
-                Log.info(f"Total contracts found for {underlying_asset}: {len(contracts)}")
-                if not contracts:
-                    Log.warn(f"No UnExpired contracts found for {underlying_asset}")
-                    continue
+            contracts = calls + puts
+            Log.info(f"Total contracts found for {underlying_asset}: {len(contracts)}")
+            if not contracts:
+                Log.warn(f"No UnExpired contracts found for {underlying_asset}")
+                continue
 
-                contracts_within_range = get_contract_within_price_range(
-                    contracts, price_range, year_range
-                )
-                Log.info(
-                    f"Contracts within price range for {underlying_asset}: "
-                    f"{len(contracts_within_range)}"
-                )
-
-                await asyncio.gather(
-                    *[process_with_sema(contract) for contract in contracts_within_range]
-                )
-                Log.info(f"All contracts for {underlying_asset} processed successfully")
-        except Exception as e:
-            Log.error(f"Error during options ingestion: {e}")
-            raise e
-        finally:
-            await db.disconnect()
-
-    async def ingest_option_snapshots(self):
-        semaphore = asyncio.Semaphore(self.concurrency_limit)
-        process_with_sema = with_semaphore(semaphore)(self._insert_option_snapshot)
-        await db.connect()
-        try:
-            total_contracts = 0
-            async for contracts_batch in option_retriever.stream_retrieve():
-                Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
-                total_contracts += len(contracts_batch)
-                snapshots = await fetch_snapshots_batch(contracts_batch)
-                await asyncio.gather(
-                    *[
-                        process_with_sema(contract.ticker, snapshot)
-                        for contract, snapshot in zip(contracts_batch, snapshots)
-                    ]
-                )
-            Log.info(
-                f"All option snapshots processed successfully. "
-                f"Total contracts processed: {total_contracts}"
+            contracts_within_range = get_contract_within_price_range(
+                contracts, price_range, year_range
             )
-        except Exception as e:
-            Log.error(f"Error during option snapshots ingestion: {e}")
-            raise e
-        finally:
-            await db.disconnect()
+            Log.info(
+                f"Contracts within price range for {underlying_asset}: "
+                f"{len(contracts_within_range)}"
+            )
+
+            await asyncio.gather(
+                *[process_with_sema(contract) for contract in contracts_within_range]
+            )
+            Log.info(f"All contracts for {underlying_asset} processed successfully")
+
+    @bounded_db
+    async def ingest_option_snapshots(self):
+        process_with_sema = with_semaphore(semaphore)(self._insert_option_snapshot)
+        total_contracts = 0
+        async for contracts_batch in option_retriever.stream_retrieve():
+            Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
+            total_contracts += len(contracts_batch)
+            snapshots = await fetch_snapshots_batch(contracts_batch)
+            await asyncio.gather(
+                *[
+                    process_with_sema(contract.ticker, snapshot)
+                    for contract, snapshot in zip(contracts_batch, snapshots)
+                ]
+            )
+        Log.info(
+            f"All option snapshots processed successfully. "
+            f"Total contracts processed: {total_contracts}"
+        )
 
     async def _upsert_option_contract(self, contract: OptionsContract) -> Options:
         expiration_dt = option_expiration_date_to_datetime(contract.expiration_date)
@@ -195,23 +193,53 @@ class OptionIngestor:
         last_updated_dt = ns_to_datetime(last_updated_raw) if last_updated_raw else None
         curr_datetime = self.ingest_time
         attempt = 0
+
+        # TODO: parse greeks fn
+
+        # greeks = {
+        #     "delta": snapshot.greeks.delta if snapshot.greeks else None,
+        #     "gamma": snapshot.greeks.gamma if snapshot.greeks else None,
+        #     "theta": snapshot.greeks.theta if snapshot.greeks else None,
+        #     "vega": snapshot.greeks.vega if snapshot.greeks else None,
+        # }
+
         while attempt < max_retries:
             try:
                 if last_updated_dt is None:
                     raise OptionTickerNeverActiveError("last_updated is required")
-                result = await db.optionsnapshot.create(
-                    data={
-                        "open_interest": snapshot.open_interest,
-                        "volume": snapshot.day.volume if snapshot.day else None,
-                        "implied_vol": snapshot.implied_volatility,
-                        "last_price": snapshot.day.close if snapshot.day else None,
+                result = await db.optionsnapshot.upsert(
+                    where={
+                        "ticker": contract_ticker,
                         "last_updated": last_updated_dt,
-                        "last_crawled": curr_datetime,
-                        "day_open": snapshot.day.open if snapshot.day else None,
-                        "day_close": snapshot.day.close if snapshot.day else None,
-                        "day_change": snapshot.day.change_percent if snapshot.day else None,
-                        "option": {"connect": {"ticker": contract_ticker}},
-                    }
+                    },
+                    data={
+                        "create": {
+                            "open_interest": snapshot.open_interest,
+                            "volume": snapshot.day.volume if snapshot.day else None,
+                            "implied_vol": snapshot.implied_volatility,
+                            # "greeks": None,
+                            "last_price": snapshot.day.close if snapshot.day else None,
+                            "last_updated": last_updated_dt,
+                            "last_crawled": curr_datetime,
+                            "day_open": snapshot.day.open if snapshot.day else None,
+                            "day_close": snapshot.day.close if snapshot.day else None,
+                            "day_change": snapshot.day.change_percent if snapshot.day else None,
+                            "option": {"connect": {"ticker": contract_ticker}},
+                        },
+                        "update": {
+                            "open_interest": snapshot.open_interest,
+                            "volume": snapshot.day.volume if snapshot.day else None,
+                            "implied_vol": snapshot.implied_volatility,
+                            # "greeks": None,
+                            "last_price": snapshot.day.close if snapshot.day else None,
+                            "last_updated": last_updated_dt,
+                            "last_crawled": curr_datetime,
+                            "day_open": snapshot.day.open if snapshot.day else None,
+                            "day_close": snapshot.day.close if snapshot.day else None,
+                            "day_change": snapshot.day.change_percent if snapshot.day else None,
+                            "option": {"connect": {"ticker": contract_ticker}},
+                        },
+                    },
                 )
                 Log.info(
                     f"{curr_datetime} Inserted snapshot for {contract_ticker}: "

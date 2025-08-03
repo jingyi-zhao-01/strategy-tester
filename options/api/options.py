@@ -111,5 +111,4 @@ async def fetch_snapshots_batch(contracts: list[OptionsContract]) -> list[Option
         for contract in contracts
     ]
     results = await asyncio.gather(*tasks)
-    # Filter out None results (expired/not found contracts)
     return [snapshot for snapshot in results if snapshot is not None]

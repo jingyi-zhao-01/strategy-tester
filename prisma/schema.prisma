@@ -1,21 +1,21 @@
+generator client {
+  provider             = "prisma-client-py"
+  output               = "../generated/prisma"
+  recursive_type_depth = "5"
+  interface            = "asyncio"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider             = "prisma-client-py"
-  interface            = "asyncio"
-  recursive_type_depth = 5
-  output              = "../generated/prisma"
-}
-
 model Options {
-  id                Int        @id @default(autoincrement())
-  ticker            String     @unique
+  id                Int              @id @default(autoincrement())
+  ticker            String           @unique
   underlying_ticker String
   contract_type     String
-  expiration_date   DateTime   @db.Timestamptz
+  expiration_date   DateTime         @db.Timestamptz(6)
   strike_price      Float
   snapshots         OptionSnapshot[]
 
@@ -23,9 +23,6 @@ model Options {
   @@index([strike_price])
   @@map("options")
 }
-
-
-//TODO: Elimiate duplicate storage of ticker Key for efficient storage
 
 model OptionSnapshot {
   id            Int       @id @default(autoincrement())
@@ -36,9 +33,10 @@ model OptionSnapshot {
   day_open      Float?
   implied_vol   Float?
   last_price    Float?
-  last_updated  DateTime? @db.Timestamptz
-  last_crawled  DateTime  @db.Timestamptz
+  last_updated  DateTime? @db.Timestamptz(6)
+  last_crawled  DateTime  @db.Timestamptz(6)
   open_interest Int?
+  greeks        Json?
   option        Options   @relation(fields: [ticker], references: [ticker])
 
   @@unique([ticker, last_updated])
