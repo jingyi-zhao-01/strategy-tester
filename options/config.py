@@ -5,9 +5,12 @@ from prisma import Prisma
 db = Prisma(auto_register=True)
 # TODO: Open Interest vs expiration date vs strike price
 
-CONCURRENCY_LIMIT = 250
+CONCURRENCY_LIMIT = 100
 OPTION_BATCH_RETRIEVAL_SIZE = 500
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
+
+
+# TODO: Benchmark on Semaphore
 
 
 def bounded_db_connection(func):
@@ -21,7 +24,7 @@ def bounded_db_connection(func):
     return wrapper
 
 
-def bounded_async_sem(limit=None):
+def bounded_async_sem(limit=CONCURRENCY_LIMIT):
     def wrapper(coro):
         async def inner(*args, **kwargs):
             sem = asyncio.Semaphore(limit) if limit else semaphore

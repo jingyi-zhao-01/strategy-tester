@@ -12,7 +12,7 @@ from ..util import parse_option_symbol
 NOT_FOUND_STATUS_CODE = 404
 
 
-class Core:
+class Fetcher:
     def __init__(self, asset: str = None):
         self.asset = asset
         self.api_key = os.getenv("POLYGON_API_KEY")
@@ -21,11 +21,11 @@ class Core:
         self.client = RESTClient(self.api_key)
 
     def get_call_contracts(self) -> list[OptionsContract]:
-        contracts: list[OptionsContract] = []
+        contracts: list[OptionsContract | bytes] = []
         for contract in self.client.list_options_contracts(
             underlying_ticker=self.asset,
             contract_type="call",
-            expired="false",
+            expired=False,
             order="desc",
             sort="strike_price",
         ):
@@ -33,11 +33,11 @@ class Core:
         return contracts
 
     def get_put_contracts(self) -> list[OptionsContract]:
-        contracts: list[OptionsContract] = []
+        contracts: list[OptionsContract | bytes] = []
         for contract in self.client.list_options_contracts(
             underlying_ticker=self.asset,
             contract_type="put",
-            expired="false",
+            expired=False,
             order="desc",
             sort="strike_price",
         ):
@@ -81,7 +81,7 @@ def get_contract_within_price_range(
     contracts: list[OptionsContract],
     price_range: tuple[float, float],
     year_range: tuple[int, int] = None,
-) -> list[OptionContractSnapshot]:
+) -> list[OptionsContract]:
     min_price, max_price = price_range
     start_year, end_year = year_range if year_range else (None, None)
     return [
@@ -104,7 +104,7 @@ def get_contract_within_price_range(
 
 
 async def fetch_snapshots_batch(contracts: list[OptionsContract]) -> list[OptionContractSnapshot]:
-    option_fetcher = Core(None)
+    option_fetcher = Fetcher(None)
 
     tasks = [
         option_fetcher.fetch_daily_snapshot_async(contract.underlying_ticker, contract.ticker)
