@@ -1,5 +1,5 @@
 import asyncio
-import json
+import traceback
 
 from lib import Log
 from options.api.options import Fetcher, fetch_snapshots_batch, get_contract_within_price_range
@@ -15,6 +15,7 @@ from options.util import (
     ns_to_datetime,
     option_expiration_date_to_datetime,
 )
+from prisma import Json
 from prisma.errors import UniqueViolationError
 from prisma.models import Options, OptionSnapshot
 
@@ -102,34 +103,42 @@ class OptionIngestor:
     @bounded_async_sem()
     async def _upsert_option_contract(self, contract: OptionsContract) -> Options:
         expiration_dt = option_expiration_date_to_datetime(contract.expiration_date)
-        Log.info(
-            f"Upserting contract: {contract.ticker}, "
-            f"Strike: {contract.strike_price}, "
-            f"Expiration: {expiration_dt}, "
-            f"Type: {contract.contract_type}"
-        )
-
         try:
+            Log.info(
+                f"Upserting contract: {contract.ticker}, "
+                f"Strike: {contract.strike_price}, "
+                f"Expiration: {expiration_dt}, "
+                f"Type: {contract.contract_type}"
+            )
             return await Options.prisma().upsert(
-                where={"ticker": contract.ticker},
+                where={"ticker": str(contract.ticker)},
                 data={
                     "create": {
-                        "ticker": contract.ticker,
-                        "underlying_ticker": contract.underlying_ticker,
-                        "strike_price": contract.strike_price,
+                        "ticker": str(contract.ticker),
+                        "underlying_ticker": str(contract.underlying_ticker),
+                        "strike_price": (
+                            float(contract.strike_price)
+                            if contract.strike_price is not None
+                            else 0.0
+                        ),
                         "expiration_date": expiration_dt,
                         "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
                     },
                     "update": {
-                        "underlying_ticker": contract.underlying_ticker,
-                        "strike_price": contract.strike_price,
+                        "underlying_ticker": str(contract.underlying_ticker),
+                        "strike_price": (
+                            float(contract.strike_price)
+                            if contract.strike_price is not None
+                            else 0.0
+                        ),
                         "expiration_date": expiration_dt,
                         "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
                     },
                 },
             )
         except Exception as e:
-            Log.error(f"Error upserting contract {contract.ticker}: {e}")
+            Log.error(f"Error upserting contract {contract.ticker}: {e} ({type(e).__name__})")
+            Log.error(traceback.format_exc())
             raise
 
     @bounded_async_sem()
@@ -140,20 +149,26 @@ class OptionIngestor:
         max_retries: int = 1,
         delay: float = 1.0,
     ) -> OptionSnapshot:
-        last_updated_raw = snapshot.day.last_updated if snapshot.day.last_updated else None
+        last_updated_raw = (
+            snapshot.day.last_updated
+            if snapshot.day is not None and snapshot.day.last_updated
+            else None
+        )
         last_updated_dt = ns_to_datetime(last_updated_raw) if last_updated_raw else None
         curr_datetime = self.ingest_time
         attempt = 0
 
         # Parse Greeks data
+
         greeks = None
         if snapshot.greeks:
-            greeks = {
+            greeks_dict = {
                 "delta": snapshot.greeks.delta if snapshot.greeks.delta is not None else None,
                 "gamma": snapshot.greeks.gamma if snapshot.greeks.gamma is not None else None,
                 "theta": snapshot.greeks.theta if snapshot.greeks.theta is not None else None,
                 "vega": snapshot.greeks.vega if snapshot.greeks.vega is not None else None,
             }
+            greeks = Json(greeks_dict)
 
         while attempt < max_retries:
             try:
@@ -164,34 +179,54 @@ class OptionIngestor:
                         "ticker_last_updated": {
                             "ticker": contract_ticker,
                             "last_updated": last_updated_dt,
-                        },
+                        }
                     },
                     data={
                         "create": {
-                            "open_interest": snapshot.open_interest,
-                            "volume": snapshot.day.volume if snapshot.day is not None else None,
+                            "open_interest": (
+                                int(snapshot.open_interest)
+                                if snapshot.open_interest is not None
+                                else None
+                            ),
+                            "volume": (
+                                int(snapshot.day.volume)
+                                if snapshot.day is not None and snapshot.day.volume is not None
+                                else None
+                            ),
                             "implied_vol": snapshot.implied_volatility,
-                            "greeks": json.dumps(greeks),
-                            "last_price": snapshot.day.close if snapshot.day is not None else None,
+                            "greeks": greeks if greeks is not None else None,
+                            "last_price": (
+                                snapshot.day.close if snapshot.day is not None else None
+                            ),
                             "last_updated": last_updated_dt,
                             "last_crawled": curr_datetime,
-                            "day_open": snapshot.day.open if snapshot.day is not None else None,
-                            "day_close": snapshot.day.close if snapshot.day is not None else None,
+                            "day_open": (snapshot.day.open if snapshot.day is not None else None),
+                            "day_close": (snapshot.day.close if snapshot.day is not None else None),
                             "day_change": (
                                 snapshot.day.change_percent if snapshot.day is not None else None
                             ),
                             "option": {"connect": {"ticker": contract_ticker}},
                         },
                         "update": {
-                            "open_interest": snapshot.open_interest,
-                            "volume": snapshot.day.volume if snapshot.day is not None else None,
+                            "open_interest": (
+                                int(snapshot.open_interest)
+                                if snapshot.open_interest is not None
+                                else None
+                            ),
+                            "volume": (
+                                int(snapshot.day.volume)
+                                if snapshot.day is not None and snapshot.day.volume is not None
+                                else None
+                            ),
                             "implied_vol": snapshot.implied_volatility,
-                            "greeks": json.dumps(greeks),
-                            "last_price": snapshot.day.close if snapshot.day is not None else None,
+                            "greeks": greeks if greeks is not None else None,
+                            "last_price": (
+                                snapshot.day.close if snapshot.day is not None else None
+                            ),
                             "last_updated": last_updated_dt,
                             "last_crawled": curr_datetime,
-                            "day_open": snapshot.day.open if snapshot.day is not None else None,
-                            "day_close": snapshot.day.close if snapshot.day is not None else None,
+                            "day_open": (snapshot.day.open if snapshot.day is not None else None),
+                            "day_close": (snapshot.day.close if snapshot.day is not None else None),
                             "day_change": (
                                 snapshot.day.change_percent if snapshot.day is not None else None
                             ),
