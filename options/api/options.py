@@ -5,6 +5,7 @@ import httpx
 from polygon import RESTClient
 
 from lib.log.log import Log
+from prisma.models import Options
 
 from ..models import OptionContractSnapshot, OptionsContract
 from ..util import parse_option_symbol
@@ -103,7 +104,7 @@ def get_contract_within_price_range(
     ]
 
 
-async def fetch_snapshots_batch(contracts: list[OptionsContract]) -> list[OptionContractSnapshot]:
+async def fetch_snapshots_batch(contracts: list[Options]) -> list[OptionContractSnapshot]:
     option_fetcher = Fetcher(None)
 
     tasks = [

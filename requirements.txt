@@ -5,3 +5,4 @@ pytz==2025.2
 python-dotenv==1.1.1
 pytest
 pytest-cov==6.2.1
+pytest-asyncio==1.1.0

@@ -42,7 +42,7 @@ class OptionRetriever:
     # @bounded_db
     async def stream_retrieve(self) -> AsyncGenerator[list[Options], None]:
         try:
-            Log.info(f"Starting contract retrieval for ingest session: {self.ingest_time}")
+            Log.info(f"Starting active contract retrieval for ingest session: {self.ingest_time}")
             offset = 0
             while True:
                 batch = await Options.prisma().find_many(

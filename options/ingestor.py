@@ -16,7 +16,7 @@ from options.util import (
     option_expiration_date_to_datetime,
 )
 from prisma import Json
-from prisma.errors import UniqueViolationError
+from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from prisma.models import Options, OptionSnapshot
 
 from .models import OptionContractSnapshot, OptionIngestParams, OptionsContract
@@ -245,6 +245,10 @@ class OptionIngestor:
                 break
             except OptionTickerNeverActiveError:
                 Log.info(f"{contract_ticker} is not active")
+                break
+            except ClientNotConnectedError as e:
+                # TODO: figure out a way inccacse database connecting error
+                Log.error(f"Database connection error: {e}. Retrying up to {max_retries} times...")
                 break
             except Exception as e:
                 attempt += 1
