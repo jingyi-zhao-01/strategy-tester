@@ -7,6 +7,7 @@ from polygon import RESTClient
 from lib.log.log import Log
 from prisma.models import Options
 
+from ..decorator import bounded_async_sem
 from ..models import OptionContractSnapshot, OptionsContract
 from ..util import parse_option_symbol
 
@@ -52,11 +53,12 @@ class Fetcher:
         return snapshot
 
     async def fetch_daily_snapshot_async(
-        self, underlying_asset: str, option_ticker_name: str
+        self, underlying_asset: str, option_ticker_name: str, *args, **kwargs
     ) -> OptionContractSnapshot | None:
         url = f"https://api.polygon.io/v3/snapshot/options/{underlying_asset}/{option_ticker_name}?apiKey={self.api_key}"
 
-        async with httpx.AsyncClient() as client:
+        timeout = kwargs.get("timeout", 10.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
             try:
                 response = await client.get(url)
                 response.raise_for_status()
@@ -104,11 +106,17 @@ def get_contract_within_price_range(
     ]
 
 
-async def fetch_snapshots_batch(contracts: list[Options]) -> list[OptionContractSnapshot]:
+# polygon api key has a concurrency limit
+# TODO: modify to fetch_snapshot_stream
+@bounded_async_sem(limit=300)
+async def fetch_snapshots_batch(
+    contracts: list[Options], *args, **kwargs
+) -> list[OptionContractSnapshot]:
     option_fetcher = Fetcher(None)
-
     tasks = [
-        option_fetcher.fetch_daily_snapshot_async(contract.underlying_ticker, contract.ticker)
+        option_fetcher.fetch_daily_snapshot_async(
+            contract.underlying_ticker, contract.ticker, *args, **kwargs
+        )
         for contract in contracts
     ]
     results = await asyncio.gather(*tasks)

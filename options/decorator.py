@@ -10,9 +10,6 @@ OPTION_BATCH_RETRIEVAL_SIZE = 500
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
 
-# TODO: Benchmark on Semaphore
-
-
 def bounded_db_connection(func):
     async def wrapper(*args, **kwargs):
         await db.connect()

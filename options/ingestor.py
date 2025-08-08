@@ -79,8 +79,8 @@ class OptionIngestor:
                 f"Total contracts processed: {total_contracts}"
             )
         except Exception as e:
-            Log.error(f"Error during option snapshots ingestion: {e}")
-            raise
+            Log.error(f"Error during option snapshots ingestion: {e}\n{traceback.format_exc()}")
+            # Do not re-raise to avoid duplicate logging and empty error messages
 
     async def _retrieve_all_option_contracts(self) -> list[Options]:
         try:
@@ -91,7 +91,7 @@ class OptionIngestor:
             Log.error(f"Error fetching option contracts: {e}")
             return []
 
-    @bounded_async_sem()
+    @bounded_async_sem(limit=200)
     async def _upsert_option_contract(self, contract: OptionsContract) -> Options:
         expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
         try:
@@ -132,7 +132,7 @@ class OptionIngestor:
             Log.error(traceback.format_exc())
             raise
 
-    @bounded_async_sem()
+    @bounded_async_sem(limit=200)
     async def _upsert_option_snapshot(
         self,
         contract_ticker: str,
@@ -250,29 +250,11 @@ class OptionIngestor:
                 if attempt < max_retries:
                     await asyncio.sleep(delay)
                 else:
-                    raise
-
-
-# if __name__ == "__main__":
-#     LIMIT = 5
-
-#     ASSET = "SE"
-#     LIMIT = 100
-#     PRICE_RANGE = (140, 200)
-#     YEAR_RANGE = (2025, 2025)
-
-#     UNDERLYING_ASSET = "NBIS"
-#     NBIS_PARAMS = (UNDERLYING_ASSET, (40, 70), (2025, 2025))
-
-#     ASSET = "HOOD"
-#     HOOD_PARAMS = (ASSET, (100, 150), (2025, 2025))
-
-#     ASSET = "FCX"
-#     FCX_PARAMS = (ASSET, (45, 50), (2025, 2025))
-#     ingestor = OptionIngestor(option_retriever=option_retriever)
-
-#     # asyncio.run(ingest_options(NBIS_PARAMS))
-#     asyncio.run(ingestor.ingest_option_snapshots())
+                    Log.error(traceback.format_exc())
+                    Log.error(
+                        f"Failed to insert snapshot for {contract_ticker} after "
+                        f"{max_retries} attempts"
+                    )
 
 
 __all__ = ["OptionIngestor"]
