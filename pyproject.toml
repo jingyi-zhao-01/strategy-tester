@@ -1,3 +1,26 @@
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+[project]
+name = "strategy-tester"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Jingyi Zhao",email = "zhao.elton@gmail.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx (==0.28.1)",
+    "polygon-api-client (==1.15.1)",
+    "prisma (==0.15.0)",
+    "pytz (==2025.2)",
+    "python-dotenv (==1.1.1)"
+]
+
+
 [tool.black]
 line-length = 100
 
@@ -13,3 +36,25 @@ typeCheckingMode = "basic"
 pythonVersion = "3.12"
 include = ["."]
 exclude = ["__pycache__", "build", "dist"]
+
+[tool.poetry]
+name = "strategy-tester"
+version = "0.1.0"
+description = ""
+authors = ["Jingyi Zhao <zhao.elton@gmail.com>"]
+readme = "README.md"
+packages = [{ include = "options" }, { include = "lib" }]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<4.0"
+httpx = "0.28.1"
+polygon-api-client = "1.15.1"
+prisma = "0.15.0"
+pytz = "2025.2"
+python-dotenv = "1.1.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.4.1"
+pytest-cov = "6.2.1"
+pytest-asyncio = "1.1.0"
+ruff = "^0.4.2"
