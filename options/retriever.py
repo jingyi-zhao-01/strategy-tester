@@ -30,9 +30,7 @@ class OptionRetriever:
     @bounded_db_connection
     async def retrieve_all(self) -> list[Options]:
         try:
-            contracts = await Options.prisma().find_many(
-                # where={"expiration_date": {"gte": self.ingest_time}}
-            )
+            contracts = await Options.prisma().find_many()
             Log.info(f"Retrieved {len(contracts)} unexpired option contracts from the database.")
             return contracts
         except Exception as e:

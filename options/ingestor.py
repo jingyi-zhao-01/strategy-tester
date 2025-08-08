@@ -25,7 +25,6 @@ from .retriever import OptionRetriever
 class OptionIngestor:
     def __init__(self, option_retriever=None):
         self.ingest_time = get_current_datetime()
-        # self.concurrency_limit = concurrency_limit
 
         if option_retriever is None:
             raise ValueError("option_retriever must be provided")
@@ -34,7 +33,6 @@ class OptionIngestor:
 
     @bounded_db_connection
     async def ingest_options(self, underlying_assets: list[OptionIngestParams]):
-        # process_with_sema = bounded_async_sem(semaphore)(self._upsert_option_contract)
         for target in underlying_assets:
             underlying_asset = target.underlying_asset
             price_range = target.price_range
@@ -65,7 +63,6 @@ class OptionIngestor:
     @bounded_db_connection
     async def ingest_option_snapshots(self):
         try:
-            # process_with_sema = bounded_async_sem(semaphore)(self._upsert_option_snapshot)
             total_contracts = 0
             async for contracts_batch in self.option_retriever.stream_retrieve_active():
                 Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
@@ -74,7 +71,7 @@ class OptionIngestor:
                 await asyncio.gather(
                     *[
                         self._upsert_option_snapshot(contract.ticker, snapshot)
-                        for contract, snapshot in zip(contracts_batch, snapshots)
+                        for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
                     ]
                 )
             Log.info(
