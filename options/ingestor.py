@@ -3,12 +3,7 @@ import traceback
 
 from lib import Log
 from options.api.options import Fetcher, fetch_snapshots_batch, get_contract_within_price_range
-from options.config import (
-    CONCURRENCY_LIMIT,
-    bounded_async_sem,
-    bounded_db_connection,
-)
-from options.retriever import OptionRetriever
+from options.errors import OptionTickerNeverActiveError
 from options.util import (
     format_snapshot,
     get_current_datetime,
@@ -19,19 +14,18 @@ from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from prisma.models import Options, OptionSnapshot
 
+from .decorator import (
+    bounded_async_sem,
+    bounded_db_connection,
+)
 from .models import OptionContractSnapshot, OptionIngestParams, OptionsContract
-
-
-class OptionTickerNeverActiveError(Exception):
-    """Base class for other exceptions."""
-
-    pass
+from .retriever import OptionRetriever
 
 
 class OptionIngestor:
-    def __init__(self, option_retriever=None, concurrency_limit=CONCURRENCY_LIMIT):
+    def __init__(self, option_retriever=None):
         self.ingest_time = get_current_datetime()
-        self.concurrency_limit = concurrency_limit
+        # self.concurrency_limit = concurrency_limit
 
         if option_retriever is None:
             raise ValueError("option_retriever must be provided")
@@ -73,7 +67,7 @@ class OptionIngestor:
         try:
             # process_with_sema = bounded_async_sem(semaphore)(self._upsert_option_snapshot)
             total_contracts = 0
-            async for contracts_batch in self.option_retriever.stream_retrieve():
+            async for contracts_batch in self.option_retriever.stream_retrieve_active():
                 Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
                 total_contracts += len(contracts_batch)
                 snapshots = await fetch_snapshots_batch(contracts_batch)
@@ -102,7 +96,7 @@ class OptionIngestor:
 
     @bounded_async_sem()
     async def _upsert_option_contract(self, contract: OptionsContract) -> Options:
-        expiration_dt = option_expiration_date_to_datetime(contract.expiration_date)
+        expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
         try:
             Log.info(
                 f"Upserting contract: {contract.ticker}, "
@@ -148,7 +142,7 @@ class OptionIngestor:
         snapshot: OptionContractSnapshot,
         max_retries: int = 1,
         delay: float = 1.0,
-    ) -> OptionSnapshot:
+    ) -> OptionSnapshot | None:
         last_updated_raw = (
             snapshot.day.last_updated
             if snapshot.day is not None and snapshot.day.last_updated

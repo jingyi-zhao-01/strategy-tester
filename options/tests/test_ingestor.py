@@ -41,11 +41,6 @@ async def test_ingest_option_snapshots_empty(ingestor):
     await ingestor.ingest_option_snapshots()
 
 
-def test_option_ingestor_requires_retriever():
-    with pytest.raises(ValueError):
-        OptionIngestor(option_retriever=None)
-
-
 @pytest.mark.asyncio
 async def test_upsert_option_contract_success(ingestor):
     contract = OptionsContract.from_dict(
@@ -64,31 +59,21 @@ async def test_upsert_option_contract_success(ingestor):
         assert result == "mocked"
 
 
-# @pytest.mark.asyncio
-# async def test_upsert_option_contract_error(ingestor):
-#     contract = OptionsContract.from_dict(
-#         {
-#             "ticker": "TST",
-#             "underlying_ticker": "TST",
-#             "strike_price": 100.0,
-#             "expiration_date": "2025-12-31",
-#             "contract_type": "call",
-#         }
-#     )
-#     with patch("prisma.models.Options.prisma") as mock_prisma:
-#         mock_prisma.return_value.upsert = AsyncMock(side_effect=Exception("fail"))
-#         with pytest.raises(Exception):
-#             await ingestor._upsert_option_contract(contract)
-
-
-# @pytest.mark.asyncio
-# async def test_upsert_option_snapshot_unique_violation(ingestor):
-#     with patch("prisma.models.OptionSnapshot.prisma") as mock_prisma:
-#         mock_prisma.return_value.upsert = AsyncMock(side_effect=UniqueViolationError)
-#         snapshot = MagicMock()
-#         snapshot.day = MagicMock()
-#         snapshot.greeks = None
-#         await ingestor._upsert_option_snapshot("TST", snapshot)
+@pytest.mark.asyncio
+async def test_upsert_option_contract_error(ingestor):
+    contract = OptionsContract.from_dict(
+        {
+            "ticker": "TST",
+            "underlying_ticker": "TST",
+            "strike_price": 100.0,
+            "expiration_date": "2025-12-31",
+            "contract_type": "call",
+        }
+    )
+    with patch("prisma.models.Options.prisma") as mock_prisma:
+        mock_prisma.return_value.upsert = AsyncMock(side_effect=Exception("fail"))
+        with pytest.raises(Exception):  # noqa: B017
+            await ingestor._upsert_option_contract(contract)
 
 
 @pytest.mark.asyncio
@@ -99,3 +84,18 @@ async def test_upsert_option_snapshot_ticker_never_active(ingestor):
         snapshot.day = MagicMock()
         snapshot.greeks = None
         await ingestor._upsert_option_snapshot("TST", snapshot)
+
+
+def test_option_ingestor_requires_retriever():
+    with pytest.raises(ValueError):
+        OptionIngestor(option_retriever=None)
+
+
+# @pytest.mark.asyncio
+# async def test_upsert_option_snapshot_unique_violation(ingestor):
+#     with patch("prisma.models.OptionSnapshot.prisma") as mock_prisma:
+#         mock_prisma.return_value.upsert = AsyncMock(side_effect=UniqueViolationError)
+#         snapshot = MagicMock()
+#         snapshot.day = MagicMock()
+#         snapshot.greeks = None
+#         await ingestor._upsert_option_snapshot("TST", snapshot)

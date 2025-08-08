@@ -2,7 +2,7 @@
 from collections.abc import AsyncGenerator
 
 from lib import Log
-from options.config import (
+from options.decorator import (
     CONCURRENCY_LIMIT,
     OPTION_BATCH_RETRIEVAL_SIZE,
     bounded_db_connection,
@@ -11,10 +11,11 @@ from prisma.models import Options
 
 
 class OptionRetriever:
-    def __init__(self, concurrency_limit=CONCURRENCY_LIMIT):
+    def __init__(self, concurrency_limit=CONCURRENCY_LIMIT, batch_size=OPTION_BATCH_RETRIEVAL_SIZE):
         self._ingest_time = None  # No time initialization here - subscribes to ingestor's time
         self.concurrency_limit = concurrency_limit
         self.skip_expired = True
+        self.batch_size = batch_size
 
     def with_ingest_time(self, ingest_time) -> "OptionRetriever":
         self._ingest_time = ingest_time
@@ -38,9 +39,9 @@ class OptionRetriever:
             Log.error(f"Error fetching option contracts: {e}")
             return []
 
-    # bound iterator with db
+    # #TODO: bound iterator with db
     # @bounded_db
-    async def stream_retrieve(self) -> AsyncGenerator[list[Options], None]:
+    async def stream_retrieve_active(self, *args, **kwargs) -> AsyncGenerator[list[Options], None]:
         try:
             Log.info(f"Starting active contract retrieval for ingest session: {self.ingest_time}")
             offset = 0

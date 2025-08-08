@@ -25,9 +25,10 @@ def bounded_db_connection(func):
 
 
 def bounded_async_sem(limit=CONCURRENCY_LIMIT):
+    sem = asyncio.Semaphore(limit) if limit else semaphore
+
     def wrapper(coro):
         async def inner(*args, **kwargs):
-            sem = asyncio.Semaphore(limit) if limit else semaphore
             async with sem:
                 return await coro(*args, **kwargs)
 
