@@ -14,7 +14,7 @@ from .option_models import OptionSymbol
 @dataclass
 class OptionIngestParams:
     underlying_asset: str
-    price_range: tuple[float, float]
+    price_range: tuple[float, float] | None
     year_range: tuple[int, int]
 
 

@@ -2,7 +2,7 @@ import asyncio
 import traceback
 
 from lib import Log
-from options.api.options import Fetcher, fetch_snapshots_batch, get_contract_within_price_range
+from options.api.options import Fetcher, fetch_snapshots_batch
 from options.errors import OptionTickerNeverActiveError
 from options.util import (
     format_snapshot,
@@ -35,8 +35,8 @@ class OptionIngestor:
     async def ingest_options(self, underlying_assets: list[OptionIngestParams]):
         for target in underlying_assets:
             underlying_asset = target.underlying_asset
-            price_range = target.price_range
-            year_range = target.year_range
+            # price_range = target.price_range
+            # year_range = target.year_range
             core = Fetcher(underlying_asset)
             calls = core.get_call_contracts()
             puts = core.get_put_contracts()
@@ -47,16 +47,16 @@ class OptionIngestor:
                 Log.warn(f"No UnExpired contracts found for {underlying_asset}")
                 continue
 
-            contracts_within_range = get_contract_within_price_range(
-                contracts, price_range, year_range
-            )
-            Log.info(
-                f"Contracts within price range for {underlying_asset}: "
-                f"{len(contracts_within_range)}"
-            )
+            # contracts_within_range = get_contract_within_price_range(
+            #     contracts, price_range, year_range
+            # )
+            # Log.info(
+            #     f"Contracts within price range for {underlying_asset}: "
+            #     f"{len(contracts_within_range)}"
+            # )
 
             await asyncio.gather(
-                *[self._upsert_option_contract(contract) for contract in contracts_within_range]
+                *[self._upsert_option_contract(contract) for contract in contracts]
             )
             Log.info(f"All contracts for {underlying_asset} processed successfully")
 
