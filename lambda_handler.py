@@ -21,6 +21,7 @@ TARGETS = [
     OptionIngestParams("CRWV", None, (2025, 2025)),
     OptionIngestParams("META", None, (2025, 2025)),
     OptionIngestParams("MP", None, (2025, 2025)),
+    OptionIngestParams("SNOW", None, (2025, 2025)),
     # # ---
     # OptionIngestParams("HOOD", (100, 150), (2025, 2025)),
     # OptionIngestParams("FCX", (30, 50), (2025, 2025)),

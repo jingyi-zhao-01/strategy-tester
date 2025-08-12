@@ -6,6 +6,7 @@ db = Prisma(auto_register=True)
 # TODO: Open Interest vs expiration date vs strike price
 
 CONCURRENCY_LIMIT = 200
+DATA_BASE_CONCURRENCY_LIMIT = 500
 OPTION_BATCH_RETRIEVAL_SIZE = 500
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
