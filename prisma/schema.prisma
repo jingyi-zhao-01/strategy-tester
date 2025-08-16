@@ -27,7 +27,7 @@ model Options {
 }
 
 model OptionSnapshot {
-  id            Int       @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   ticker        String
   volume        Float?
   day_change    Float?
@@ -35,12 +35,13 @@ model OptionSnapshot {
   day_open      Float?
   implied_vol   Float?
   last_price    Float?
-  last_updated  DateTime? @db.Timestamptz(6)
+  last_updated  DateTime @db.Timestamptz(6)
   last_crawled  DateTime  @db.Timestamptz(6)
   open_interest Int?
   greeks        Json?
   option        Options   @relation(fields: [ticker], references: [ticker])
 
   @@unique([ticker, last_updated])
+  @@index([last_updated])
   @@map("option_snapshots")
 }
