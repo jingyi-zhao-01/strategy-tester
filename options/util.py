@@ -127,12 +127,26 @@ def format_snapshot(contract_ticker: str, snapshot: OptionContractSnapshot) -> s
     day_open = f"${snapshot.day.open:.2f}" if snapshot.day.open else "N/A"
     day_close = f"${snapshot.day.close:.2f}" if snapshot.day.close else "N/A"
     day_change = f"{snapshot.day.change_percent:.2f}%" if snapshot.day.change_percent else "N/A"
+
+    # Format Greeks
+    greeks_str = "N/A"
+    if snapshot.greeks:
+        greeks_parts = []
+        if snapshot.greeks.delta is not None:
+            greeks_parts.append(f"Δ:{snapshot.greeks.delta:.4f}")
+        if snapshot.greeks.gamma is not None:
+            greeks_parts.append(f"Γ:{snapshot.greeks.gamma:.4f}")
+        if snapshot.greeks.theta is not None:
+            greeks_parts.append(f"Θ:{snapshot.greeks.theta:.4f}")
+        if snapshot.greeks.vega is not None:
+            greeks_parts.append(f"ν:{snapshot.greeks.vega:.4f}")
+        greeks_str = " ".join(greeks_parts) if greeks_parts else "N/A"
     return (
         f"Ticker: {contract_ticker} | "
         f"OI: {snapshot.open_interest or 'N/A'} | "
         f"Day Volume: {snapshot.day.volume or 'N/A'} | "
         f"IV: {iv} | "
-        # f"Greeks: {snapshot.greeks or 'N/A'} | "
+        f"Greeks: {greeks_str} | "
         f"DayOpen: {day_open} | "
         f"DayClose: {day_close} | "
         f"Day Price Change: {day_change} | "

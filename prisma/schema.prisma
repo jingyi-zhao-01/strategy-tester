@@ -1,21 +1,23 @@
+generator client {
+  provider             = "prisma-client-py"
+  //TODO: why is this breaking my ORM
+  // https://github.com/prisma/prisma/discussions/25127
+  // output               = "../generated/prisma"
+  interface            = "asyncio"
+  recursive_type_depth = "5"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider             = "prisma-client-py"
-  interface            = "asyncio"
-  recursive_type_depth = 5
-  output              = "../generated/prisma"
-}
-
 model Options {
-  id                Int        @id @default(autoincrement())
-  ticker            String     @unique
+  id                Int              @id @default(autoincrement())
+  ticker            String           @unique
   underlying_ticker String
   contract_type     String
-  expiration_date   DateTime   @db.Timestamptz
+  expiration_date   DateTime         @db.Timestamptz(6)
   strike_price      Float
   snapshots         OptionSnapshot[]
 
@@ -24,28 +26,21 @@ model Options {
   @@map("options")
 }
 
-
-//TODO: Elimiate duplicate storage of ticker Key for efficient storage
-
 model OptionSnapshot {
-  id            Int      @default(autoincrement())
-  optionId      Int
+  id            Int       @id @default(autoincrement())
+  ticker        String
   volume        Float?
   day_change    Float?
   day_close     Float?
   day_open      Float?
   implied_vol   Float?
   last_price    Float?
-  last_updated  DateTime @db.Timestamptz  // NOT NULL for TimescaleDB
-  last_crawled  DateTime @db.Timestamptz
+  last_updated  DateTime? @db.Timestamptz(6)
+  last_crawled  DateTime  @db.Timestamptz(6)
   open_interest Int?
-  option        Options  @relation(fields: [optionId], references: [id])
+  greeks        Json?
+  option        Options   @relation(fields: [ticker], references: [ticker])
 
-  // Primary key is now a composite of time column first, then optionId and id
-  @@id([last_updated, optionId, id])
-  
-  // No need for additional indexes as the primary key already covers this
+  @@unique([ticker, last_updated])
   @@map("option_snapshots")
-  
-  // Note: This table is now a TimescaleDB hypertable partitioned by last_updated
 }

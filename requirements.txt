@@ -1,7 +1,12 @@
-httpx==0.28.1
-polygon-api-client==1.15.1
-prisma==0.15.0
-pytz==2025.2
-python-dotenv==1.1.1
-pytest
-pytest-cov==6.2.1
+# All dependencies are now managed by Poetry. Remove manual/duplicate entries below.
+
+# httpx==0.28.1
+# polygon-api-client==1.15.1
+# prisma==0.15.0
+# pytz==2025.2
+# python-dotenv==1.1.1
+# pytest
+# pytest-cov==6.2.1
+# pytest-asyncio==1.1.0
+# sonarcloud
+# pytest-cov
