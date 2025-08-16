@@ -14,7 +14,12 @@ from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from prisma.models import Options, OptionSnapshot
 
-from .decorator import DATA_BASE_CONCURRENCY_LIMIT, bounded_async_sem, bounded_db_connection
+from .decorator import (
+    DATA_BASE_CONCURRENCY_LIMIT,
+    bounded_async_sem,
+    bounded_db_connection,
+    traced_span_async,
+)
 from .models import OptionContractSnapshot, OptionIngestParams, OptionsContract
 from .retriever import OptionRetriever
 
@@ -29,6 +34,7 @@ class OptionIngestor:
         self.option_retriever: OptionRetriever = option_retriever.with_ingest_time(self.ingest_time)
 
     @bounded_db_connection
+    @traced_span_async(name="ingest_options", attributes={"module": "ingestor"})
     async def ingest_options(self, underlying_assets: list[OptionIngestParams]):
         for target in underlying_assets:
             underlying_asset = target.underlying_asset
@@ -58,6 +64,7 @@ class OptionIngestor:
             Log.info(f"All contracts for {underlying_asset} processed successfully")
 
     @bounded_db_connection
+    @traced_span_async(name="ingest_option_snapshots", attributes={"module": "ingestor"})
     async def ingest_option_snapshots(self):
         try:
             total_contracts = 0
@@ -89,6 +96,7 @@ class OptionIngestor:
             return []
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
+    @traced_span_async(name="_upsert_option_contract", attributes={"module": "DB"})
     async def _upsert_option_contract(self, contract: OptionsContract) -> Options:
         expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
         try:
@@ -130,6 +138,7 @@ class OptionIngestor:
             raise
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
+    @traced_span_async(name="_upsert_option_snapshot", attributes={"module": "DB"})
     async def _upsert_option_snapshot(
         self,
         contract_ticker: str,

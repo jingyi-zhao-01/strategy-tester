@@ -3,6 +3,7 @@ import json
 
 from lib.log.log import Log
 from options import ingestor
+from options.decorator import traced_span_sync
 from options.models import OptionIngestParams
 
 # Add the project directory to the Python path
@@ -48,6 +49,7 @@ def ingest_options_handler(event, context):
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
 
+@traced_span_sync(name="ingest_option_snapshots", attributes={"module": "ingestor"})
 def ingest_option_snapshots_handler(event, context):
     try:
         asyncio.run(ingestor.ingest_option_snapshots())

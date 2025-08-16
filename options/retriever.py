@@ -6,6 +6,7 @@ from options.decorator import (
     CONCURRENCY_LIMIT,
     OPTION_BATCH_RETRIEVAL_SIZE,
     bounded_db_connection,
+    traced_span_asyncgen,
 )
 from prisma.models import Options
 
@@ -39,6 +40,7 @@ class OptionRetriever:
 
     # #TODO: bound iterator with db
     # @bounded_db
+    @traced_span_asyncgen(name="stream_retrieve_active", attributes={"module": "NEON"})
     async def stream_retrieve_active(self, *args, **kwargs) -> AsyncGenerator[list[Options], None]:
         try:
             Log.info(f"Starting active contract retrieval for ingest session: {self.ingest_time}")
