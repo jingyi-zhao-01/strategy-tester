@@ -32,6 +32,7 @@ class OptionIngestor:
             raise ValueError("option_retriever must be provided")
 
         self.option_retriever: OptionRetriever = option_retriever.with_ingest_time(self.ingest_time)
+        self._option_id_cache: dict[str, int] = {}
 
     @bounded_db_connection
     @traced_span_async(name="ingest_options", attributes={"module": "ingestor"})
@@ -106,7 +107,7 @@ class OptionIngestor:
                 f"Expiration: {expiration_dt}, "
                 f"Type: {contract.contract_type}"
             )
-            return await Options.prisma().upsert(
+            record = await Options.prisma().upsert(
                 where={"ticker": str(contract.ticker)},
                 data={
                     "create": {
@@ -132,6 +133,9 @@ class OptionIngestor:
                     },
                 },
             )
+            # cache id for faster snapshot linking
+            self._option_id_cache[record.ticker] = record.id
+            return record
         except Exception as e:
             Log.error(f"Error upserting contract {contract.ticker}: {e} ({type(e).__name__})")
             Log.error(traceback.format_exc())
@@ -171,10 +175,19 @@ class OptionIngestor:
             try:
                 if last_updated_dt is None:
                     raise OptionTickerNeverActiveError("last_updated is required")
+                # Ensure we have optionId available
+                option_id = self._option_id_cache.get(contract_ticker)
+                if option_id is None:
+                    opt = await Options.prisma().find_unique(where={"ticker": contract_ticker})
+                    if opt is None:
+                        raise OptionTickerNeverActiveError(f"Unknown option ticker: {contract_ticker}")
+                    option_id = opt.id
+                    self._option_id_cache[contract_ticker] = option_id
+
                 result = await OptionSnapshot.prisma().upsert(
                     where={
-                        "ticker_last_updated": {
-                            "ticker": contract_ticker,
+                        "optionId_last_updated": {
+                            "optionId": option_id,
                             "last_updated": last_updated_dt,
                         }
                     },
@@ -202,7 +215,7 @@ class OptionIngestor:
                             "day_change": (
                                 snapshot.day.change_percent if snapshot.day is not None else None
                             ),
-                            "option": {"connect": {"ticker": contract_ticker}},
+                            "option": {"connect": {"id": option_id}},
                         },
                         "update": {
                             "open_interest": (
@@ -227,7 +240,7 @@ class OptionIngestor:
                             "day_change": (
                                 snapshot.day.change_percent if snapshot.day is not None else None
                             ),
-                            "option": {"connect": {"ticker": contract_ticker}},
+                            "option": {"connect": {"id": option_id}},
                         },
                     },
                 )
