@@ -8,10 +8,12 @@ from dataclasses import dataclass
 try:
     # Prefer real models when available
     from polygon.rest.models.contracts import OptionsContract  # type: ignore[reportMissingImports]
-    from polygon.rest.models.snapshot import OptionContractSnapshot  # type: ignore[reportMissingImports]
+    from polygon.rest.models.snapshot import (
+        OptionContractSnapshot,  # type: ignore[reportMissingImports]
+    )
 except Exception:  # pragma: no cover - typing fallback for editors
     # Fallback to minimal stub types for type checking
-    from polygon import OptionsContract, OptionContractSnapshot  # type: ignore
+    from polygon import OptionContractSnapshot, OptionsContract  # type: ignore
 
 from .option_models import OptionSymbol
 
