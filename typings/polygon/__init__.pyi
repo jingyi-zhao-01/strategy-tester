@@ -1,9 +1,19 @@
 from __future__ import annotations
-from typing import Any, Iterable
+
+from collections.abc import Iterable
+from typing import Any
 
 class RESTClient:
     def __init__(self, api_key: str) -> None: ...
-    def list_options_contracts(self, *, underlying_ticker: str | None = ..., contract_type: str | None = ..., expired: bool | None = ..., order: str | None = ..., sort: str | None = ...) -> Iterable[OptionsContract]: ...
+    def list_options_contracts(  # noqa: PLR0913
+        self,
+        *,
+        underlying_ticker: str | None = ...,
+        contract_type: str | None = ...,
+        expired: bool | None = ...,
+        order: str | None = ...,
+        sort: str | None = ...,
+    ) -> Iterable[OptionsContract]: ...
 
 class OptionsContract:
     ticker: str | None
