@@ -1,11 +1,8 @@
-"""Options package for strategy-tester."""
+"""Options package for strategy-tester.
 
-from options.retriever import OptionRetriever
+Avoid side effects at import time by not instantiating objects that may
+require external services (e.g., database, external APIs). Consumers can
+import classes/functions directly and instantiate as needed.
+"""
 
-from .ingestor import OptionIngestor
-
-option_retriever = OptionRetriever()
-
-ingestor = OptionIngestor(option_retriever=option_retriever)
-
-__all__ = ["ingestor"]
+__all__ = []

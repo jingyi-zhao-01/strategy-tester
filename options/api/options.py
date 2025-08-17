@@ -5,7 +5,10 @@ import httpx
 from polygon import RESTClient
 
 from lib.log.log import Log
-from prisma.models import Options
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from prisma.models import Options  # type: ignore
 
 from ..decorator import bounded_async_sem, traced_span_async, traced_span_sync
 from ..models import OptionContractSnapshot, OptionsContract
@@ -118,7 +121,7 @@ def get_contract_within_price_range(
 # TODO: modify to fetch_snapshot_stream
 @bounded_async_sem(limit=300)
 async def fetch_snapshots_batch(
-    contracts: list[Options], *args, **kwargs
+    contracts: list["Options"], *args, **kwargs
 ) -> list[OptionContractSnapshot]:
     option_fetcher = Fetcher(None)
     tasks = [
