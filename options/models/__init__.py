@@ -5,8 +5,13 @@ This package provides models and symbols for working with options contracts and 
 
 from dataclasses import dataclass
 
-from polygon.rest.models.contracts import OptionsContract
-from polygon.rest.models.snapshot import OptionContractSnapshot
+try:
+    # Prefer real models when available
+    from polygon.rest.models.contracts import OptionsContract  # type: ignore[reportMissingImports]
+    from polygon.rest.models.snapshot import OptionContractSnapshot  # type: ignore[reportMissingImports]
+except Exception:  # pragma: no cover - typing fallback for editors
+    # Fallback to minimal stub types for type checking
+    from polygon import OptionsContract, OptionContractSnapshot  # type: ignore
 
 from .option_models import OptionSymbol
 
