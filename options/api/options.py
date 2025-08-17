@@ -15,8 +15,8 @@ NOT_FOUND_STATUS_CODE = 404
 
 
 class Fetcher:
-    def __init__(self, asset: str = None):
-        self.asset = asset
+    def __init__(self, asset: str | None = None):
+        self.asset: str | None = asset
         self.api_key = os.getenv("POLYGON_API_KEY")
         if not self.api_key:
             raise ValueError("POLYGON_API_KEY environment variable is not set")
@@ -25,30 +25,32 @@ class Fetcher:
     # TODO: make async
     @traced_span_sync(name="fetch_call_contracts", attributes={"module": "POLYGON"})
     def get_call_contracts(self) -> list[OptionsContract]:
-        contracts: list[OptionsContract | bytes] = []
+        contracts: list[OptionsContract] = []
         for contract in self.client.list_options_contracts(
-            underlying_ticker=self.asset,
+            underlying_ticker=self.asset or "",
             contract_type="call",
             expired=False,
             order="desc",
             sort="strike_price",
         ):
-            contracts.append(contract)
+            if isinstance(contract, OptionsContract):
+                contracts.append(contract)
         return contracts
 
     # TODO: make async
 
     @traced_span_sync(name="fetch_put_contracts", attributes={"module": "POLYGON"})
     def get_put_contracts(self) -> list[OptionsContract]:
-        contracts: list[OptionsContract | bytes] = []
+        contracts: list[OptionsContract] = []
         for contract in self.client.list_options_contracts(
-            underlying_ticker=self.asset,
+            underlying_ticker=self.asset or "",
             contract_type="put",
             expired=False,
             order="desc",
             sort="strike_price",
         ):
-            contracts.append(contract)
+            if isinstance(contract, OptionsContract):
+                contracts.append(contract)
         return contracts
 
     # def get_contract_snapshot(
@@ -89,22 +91,22 @@ class Fetcher:
 def get_contract_within_price_range(
     contracts: list[OptionsContract],
     price_range: tuple[float, float],
-    year_range: tuple[int, int] = None,
+    year_range: tuple[int, int] | None = None,
 ) -> list[OptionsContract]:
     min_price, max_price = price_range
     start_year, end_year = year_range if year_range else (None, None)
     return [
         contract
         for contract in contracts
-        if min_price <= contract.strike_price <= max_price
+        if (contract.strike_price is not None and min_price <= contract.strike_price <= max_price)
         and (
-            parse_option_symbol(contract.ticker, contract.underlying_ticker).expiration.year
+            parse_option_symbol(contract.ticker or "", contract.underlying_ticker or "").expiration.year
             >= start_year
             if start_year
             else True
         )
         and (
-            parse_option_symbol(contract.ticker, contract.underlying_ticker).expiration.year
+            parse_option_symbol(contract.ticker or "", contract.underlying_ticker or "").expiration.year
             <= end_year
             if end_year
             else True

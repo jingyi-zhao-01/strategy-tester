@@ -40,7 +40,10 @@ ignore = ["D100", "D101", "D102", "D103", "D107"]
 typeCheckingMode = "basic"
 pythonVersion = "3.12"
 include = ["."]
-exclude = ["__pycache__", "build", "dist"]
+exclude = ["__pycache__", "build", "dist", "options/tests"]
+extraPaths = ["typings"]
+stubPath = "typings"
+reportMissingModuleSource = "none"
 
 [tool.poetry]
 name = "strategy-tester"

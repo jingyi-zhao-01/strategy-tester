@@ -123,14 +123,20 @@ def parse_option_symbol(symbol: str, underlying_asset: str) -> OptionSymbol:
 
 
 def format_snapshot(contract_ticker: str, snapshot: OptionContractSnapshot) -> str:
-    iv = f"{snapshot.implied_volatility:.2%}" if snapshot.implied_volatility else "N/A"
-    day_open = f"${snapshot.day.open:.2f}" if snapshot.day.open else "N/A"
-    day_close = f"${snapshot.day.close:.2f}" if snapshot.day.close else "N/A"
-    day_change = f"{snapshot.day.change_percent:.2f}%" if snapshot.day.change_percent else "N/A"
+    iv = f"{snapshot.implied_volatility:.2%}" if snapshot.implied_volatility is not None else "N/A"
+    day_open = (
+        f"${snapshot.day.open:.2f}" if snapshot.day is not None and snapshot.day.open is not None else "N/A"
+    )
+    day_close = (
+        f"${snapshot.day.close:.2f}" if snapshot.day is not None and snapshot.day.close is not None else "N/A"
+    )
+    day_change = (
+        f"{snapshot.day.change_percent:.2f}%" if snapshot.day is not None and snapshot.day.change_percent is not None else "N/A"
+    )
 
     # Format Greeks
     greeks_str = "N/A"
-    if snapshot.greeks:
+    if snapshot.greeks is not None:
         greeks_parts = []
         if snapshot.greeks.delta is not None:
             greeks_parts.append(f"Δ:{snapshot.greeks.delta:.4f}")
@@ -143,12 +149,12 @@ def format_snapshot(contract_ticker: str, snapshot: OptionContractSnapshot) -> s
         greeks_str = " ".join(greeks_parts) if greeks_parts else "N/A"
     return (
         f"Ticker: {contract_ticker} | "
-        f"OI: {snapshot.open_interest or 'N/A'} | "
-        f"Day Volume: {snapshot.day.volume or 'N/A'} | "
+        f"OI: {snapshot.open_interest if snapshot.open_interest is not None else 'N/A'} | "
+        f"Day Volume: {snapshot.day.volume if (snapshot.day is not None and snapshot.day.volume is not None) else 'N/A'} | "
         f"IV: {iv} | "
         f"Greeks: {greeks_str} | "
         f"DayOpen: {day_open} | "
         f"DayClose: {day_close} | "
         f"Day Price Change: {day_change} | "
-        f"Last Updated: {snapshot.day.last_updated or 'N/A'}"
+        f"Last Updated: {snapshot.day.last_updated if (snapshot.day is not None and snapshot.day.last_updated is not None) else 'N/A'}"
     )
