@@ -19,8 +19,8 @@ repos:
   - repo: local
     hooks:
       - id: pytest-pre-push
-        name: Run pytest with coverage on pre-push
-        entry: bash -c 'cd $(git rev-parse --show-toplevel) && pytest --cov=options --cov=lib --cov-report=term-missing --cov-fail-under=50 || (echo "\n[ERROR] Test failures detected during pre-push" >&2; exit 1)'
+        name: Run pytest with coverage XML and enforce threshold on pre-push
+        entry: bash -c 'cd $(git rev-parse --show-toplevel) && pytest --maxfail=1 --disable-warnings -q --cov=options --cov=lib --cov-report=xml:coverage.xml --cov-fail-under=${COVERAGE_THRESHOLD:-60} || (echo "\n[ERROR] Tests or coverage check failed during pre-push" >&2; exit 1)'
         language: system
         stages: [pre-push]
 
