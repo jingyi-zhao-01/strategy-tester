@@ -1,9 +1,10 @@
 import asyncio
 import traceback
 
-from lib import Log
 # Avoid hard dependency bindings to enable unit tests to monkeypatch via module paths
 from importlib import import_module
+
+from lib import Log
 from options.errors import OptionTickerNeverActiveError
 from options.util import (
     format_snapshot,
@@ -11,13 +12,18 @@ from options.util import (
     ns_to_datetime,
     option_expiration_date_to_datetime,
 )
+
 try:
     from prisma.types import Json  # type: ignore
 except Exception:  # pragma: no cover - fallback when prisma client not generated
-    def Json(value):  # type: ignore
+
+    def Json(value):  # type: ignore  # noqa: N802
         return value
-from prisma.errors import ClientNotConnectedError, UniqueViolationError
+
+
 from typing import TYPE_CHECKING
+
+from prisma.errors import ClientNotConnectedError, UniqueViolationError
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options, OptionSnapshot  # type: ignore
@@ -48,8 +54,8 @@ class OptionIngestor:
             underlying_asset = target.underlying_asset
             # price_range = target.price_range
             # year_range = target.year_range
-            Fetcher = import_module("options.api.options").Fetcher  # type: ignore
-            core = Fetcher(underlying_asset)
+            fetcher = import_module("options.api.options").Fetcher  # type: ignore
+            core = fetcher(underlying_asset)
             calls = core.get_call_contracts()
             puts = core.get_put_contracts()
 
@@ -98,8 +104,8 @@ class OptionIngestor:
 
     async def _retrieve_all_option_contracts(self) -> list["Options"]:
         try:
-            Options = import_module("prisma.models").Options  # type: ignore
-            contracts = await Options.prisma().find_many()
+            options = import_module("prisma.models").Options  # type: ignore
+            contracts = await options.prisma().find_many()
             Log.info(f"Retrieved {len(contracts)} option contracts from the database.")
             return contracts
         except Exception as e:
@@ -117,8 +123,8 @@ class OptionIngestor:
                 f"Expiration: {expiration_dt}, "
                 f"Type: {contract.contract_type}"
             )
-            Options = import_module("prisma.models").Options  # type: ignore
-            return await Options.prisma().upsert(
+            options = import_module("prisma.models").Options  # type: ignore
+            return await options.prisma().upsert(
                 where={"ticker": str(contract.ticker)},
                 data={
                     "create": {

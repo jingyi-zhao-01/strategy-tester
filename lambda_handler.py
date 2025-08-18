@@ -2,9 +2,13 @@ import asyncio
 import json
 
 from lib.log.log import Log
-from options import ingestor
 from options.decorator import traced_span_sync
+from options.ingestor import OptionIngestor
 from options.models import OptionIngestParams
+from options.retriever import OptionRetriever
+
+retriever = OptionRetriever()
+ingestor = OptionIngestor(option_retriever=retriever)
 
 # Add the project directory to the Python path
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -23,8 +27,8 @@ TARGETS = [
     OptionIngestParams("META", None, (2025, 2025)),
     OptionIngestParams("MP", None, (2025, 2025)),
     OptionIngestParams("SNOW", None, (2025, 2025)),
+    OptionIngestParams("HOOD", (100, 150), (2025, 2025)),
     # # ---
-    # OptionIngestParams("HOOD", (100, 150), (2025, 2025)),
     # OptionIngestParams("FCX", (30, 50), (2025, 2025)),
 ]
 
