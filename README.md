@@ -1,4 +1,7 @@
-[![Quality gate](https://sonarcloud.io/api/project_badges/quality_gate?project=jingyi-zhao-01_strategy-tester)](https://sonarcloud.io/summary/new_code?id=jingyi-zhao-01_strategy-tester)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=jingyi-zhao-01_strategy-tester&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=jingyi-zhao-01_strategy-tester)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=jingyi-zhao-01_strategy-tester&metric=coverage)](https://sonarcloud.io/summary/new_code?id=jingyi-zhao-01_strategy-tester)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=jingyi-zhao-01_strategy-tester&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=jingyi-zhao-01_strategy-tester)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=jingyi-zhao-01_strategy-tester&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=jingyi-zhao-01_strategy-tester)
 
 
 [option-snapshot-2025-08-08](https://jingyizhao01.grafana.net/dashboard/snapshot/476JMs1Vm2OOrRy1p9HmXNirI61ByhY9)
