@@ -1,4 +1,19 @@
 import asyncio
+import types
+
+# Provide a lightweight mock Prisma client for decorator usage in tests
+class _MockPrisma:
+    async def connect(self):
+        pass
+
+    async def disconnect(self):
+        pass
+
+# Inject mock db before importing decorator
+import options.decorator as decorator
+if decorator.db is None:
+    decorator.db = _MockPrisma()
+
 
 import pytest
 

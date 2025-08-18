@@ -8,7 +8,11 @@ from options.decorator import (
     bounded_db_connection,
     traced_span_asyncgen,
 )
-from prisma.models import Options
+from typing import TYPE_CHECKING
+from importlib import import_module
+
+if TYPE_CHECKING:  # pragma: no cover
+    from prisma.models import Options  # type: ignore
 
 
 class OptionRetriever:
@@ -29,8 +33,9 @@ class OptionRetriever:
         return self._ingest_time
 
     @bounded_db_connection
-    async def retrieve_all(self) -> list[Options]:
+    async def retrieve_all(self) -> list["Options"]:
         try:
+            Options = import_module("prisma.models").Options  # type: ignore
             contracts = await Options.prisma().find_many()
             Log.info(f"Retrieved {len(contracts)} unexpired option contracts from the database.")
             return contracts
@@ -41,8 +46,9 @@ class OptionRetriever:
     # #TODO: bound iterator with db
     # @bounded_db
     @traced_span_asyncgen(name="stream_retrieve_active", attributes={"module": "NEON"})
-    async def stream_retrieve_active(self, *args, **kwargs) -> AsyncGenerator[list[Options], None]:
+    async def stream_retrieve_active(self, *args, **kwargs) -> AsyncGenerator[list["Options"], None]:
         try:
+            Options = import_module("prisma.models").Options  # type: ignore
             Log.info(f"Starting active contract retrieval for ingest session: {self.ingest_time}")
             offset = 0
             while True:

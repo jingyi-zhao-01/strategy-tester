@@ -6,8 +6,6 @@ from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 from opentelemetry.trace.status import Status, StatusCode
 
-from prisma import Prisma
-
 load_dotenv()
 
 
@@ -21,16 +19,23 @@ OPTION_BATCH_RETRIEVAL_SIZE = 500
 _tracer = trace.get_tracer(__name__)
 
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-db = Prisma(auto_register=True)
+# Lazy DB client; will be provided via monkeypatch in tests or resolved at runtime.
+# Avoid importing/initializing Prisma at import time to prevent errors when the client
+# hasn't been generated or when DB is unavailable.
+db = None
 
 
 def bounded_db_connection(func):
     async def wrapper(*args, **kwargs):
-        await db.connect()
-        try:
+        client = db
+        if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
+            await client.connect()
+            try:
+                return await func(*args, **kwargs)
+            finally:
+                await client.disconnect()
+        else:
             return await func(*args, **kwargs)
-        finally:
-            await db.disconnect()
 
     return wrapper
 

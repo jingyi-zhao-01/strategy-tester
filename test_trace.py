@@ -1,3 +1,8 @@
+import pytest
+
+# Skip running this integration-only module during unit tests
+pytest.skip("integration-only script; skip during unit tests", allow_module_level=True)
+
 from lib.log.log import Log
 from options.api.options import Fetcher
 from options.decorator import traced_span_async

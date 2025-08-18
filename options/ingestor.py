@@ -1,8 +1,10 @@
 import asyncio
 import traceback
 
+# Avoid hard dependency bindings to enable unit tests to monkeypatch via module paths
+from importlib import import_module
+
 from lib import Log
-from options.api.options import Fetcher, fetch_snapshots_batch
 from options.errors import OptionTickerNeverActiveError
 from options.util import (
     format_snapshot,
@@ -10,9 +12,21 @@ from options.util import (
     ns_to_datetime,
     option_expiration_date_to_datetime,
 )
-from prisma import Json
+
+try:
+    from prisma.types import Json  # type: ignore
+except Exception:  # pragma: no cover - fallback when prisma client not generated
+
+    def Json(value):  # type: ignore  # noqa: N802
+        return value
+
+
+from typing import TYPE_CHECKING
+
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
-from prisma.models import Options, OptionSnapshot
+
+if TYPE_CHECKING:  # pragma: no cover
+    from prisma.models import Options, OptionSnapshot  # type: ignore
 
 from .decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
@@ -40,7 +54,8 @@ class OptionIngestor:
             underlying_asset = target.underlying_asset
             # price_range = target.price_range
             # year_range = target.year_range
-            core = Fetcher(underlying_asset)
+            fetcher = import_module("options.api.options").Fetcher  # type: ignore
+            core = fetcher(underlying_asset)
             calls = core.get_call_contracts()
             puts = core.get_put_contracts()
 
@@ -71,6 +86,7 @@ class OptionIngestor:
             async for contracts_batch in self.option_retriever.stream_retrieve_active():
                 Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
                 total_contracts += len(contracts_batch)
+                fetch_snapshots_batch = import_module("options.api.options").fetch_snapshots_batch  # type: ignore
                 snapshots = await fetch_snapshots_batch(contracts_batch)
                 await asyncio.gather(
                     *[
@@ -86,9 +102,10 @@ class OptionIngestor:
             Log.error(f"Error during option snapshots ingestion: {e}\n{traceback.format_exc()}")
             # Do not re-raise to avoid duplicate logging and empty error messages
 
-    async def _retrieve_all_option_contracts(self) -> list[Options]:
+    async def _retrieve_all_option_contracts(self) -> list["Options"]:
         try:
-            contracts = await Options.prisma().find_many()
+            options = import_module("prisma.models").Options  # type: ignore
+            contracts = await options.prisma().find_many()
             Log.info(f"Retrieved {len(contracts)} option contracts from the database.")
             return contracts
         except Exception as e:
@@ -97,7 +114,7 @@ class OptionIngestor:
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
     @traced_span_async(name="_upsert_option_contract", attributes={"module": "DB"})
-    async def _upsert_option_contract(self, contract: OptionsContract) -> Options:
+    async def _upsert_option_contract(self, contract: OptionsContract) -> "Options":
         expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
         try:
             Log.info(
@@ -106,7 +123,8 @@ class OptionIngestor:
                 f"Expiration: {expiration_dt}, "
                 f"Type: {contract.contract_type}"
             )
-            return await Options.prisma().upsert(
+            options = import_module("prisma.models").Options  # type: ignore
+            return await options.prisma().upsert(
                 where={"ticker": str(contract.ticker)},
                 data={
                     "create": {
@@ -145,7 +163,7 @@ class OptionIngestor:
         snapshot: OptionContractSnapshot,
         max_retries: int = 1,
         delay: float = 1.0,
-    ) -> OptionSnapshot | None:
+    ) -> "OptionSnapshot | None":
         last_updated_raw = (
             snapshot.day.last_updated
             if snapshot.day is not None and snapshot.day.last_updated
