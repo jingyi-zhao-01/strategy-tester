@@ -1,5 +1,7 @@
 # Ensure repository root is on sys.path so 'options' and 'lib' packages are importable
-import os, sys, types
+import os
+import sys
+import types
 ROOT = os.path.dirname(__file__)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
