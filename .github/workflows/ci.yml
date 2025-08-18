@@ -62,5 +62,4 @@ jobs:
             -Dsonar.projectKey=jingyi-zhao-01_strategy-tester
             -Dsonar.organization=jzhao62
             -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.coverageReportPaths=coverage.xml
           projectBaseDir: .
