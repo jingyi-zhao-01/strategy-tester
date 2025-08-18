@@ -18,7 +18,6 @@ except Exception:  # pragma: no cover - fallback when prisma client not generate
         return value
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from typing import TYPE_CHECKING
-from importlib import import_module
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options, OptionSnapshot  # type: ignore
