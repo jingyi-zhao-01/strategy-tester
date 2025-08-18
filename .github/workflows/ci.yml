@@ -1,0 +1,66 @@
+name: CI (tests + Sonar)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies with Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry
+          poetry install --no-interaction
+
+      - name: Run tests and generate coverage.xml
+        run: |
+          poetry run pytest --cov=./ --cov-report=xml:coverage.xml -q
+
+      - name: Upload coverage as artifact (optional)
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  sonar:
+    needs: tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get coverage.xml from previous job
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-xml
+          path: ./
+
+      - name: Analyze with SonarCloud
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.projectKey=jingyi-zhao-01_strategy-tester
+            -Dsonar.organization=jzhao62
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.coverageReportPaths=coverage.xml
+          projectBaseDir: .
