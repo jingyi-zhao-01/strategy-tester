@@ -1,11 +1,11 @@
 import asyncio
 import os
+from typing import TYPE_CHECKING
 
 import httpx
 from polygon import RESTClient
 
 from lib.log.log import Log
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options  # type: ignore
@@ -103,13 +103,17 @@ def get_contract_within_price_range(
         for contract in contracts
         if (contract.strike_price is not None and min_price <= contract.strike_price <= max_price)
         and (
-            parse_option_symbol(contract.ticker or "", contract.underlying_ticker or "").expiration.year
+            parse_option_symbol(
+                contract.ticker or "", contract.underlying_ticker or ""
+            ).expiration.year
             >= start_year
             if start_year
             else True
         )
         and (
-            parse_option_symbol(contract.ticker or "", contract.underlying_ticker or "").expiration.year
+            parse_option_symbol(
+                contract.ticker or "", contract.underlying_ticker or ""
+            ).expiration.year
             <= end_year
             if end_year
             else True

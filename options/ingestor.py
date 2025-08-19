@@ -12,21 +12,9 @@ from options.util import (
     ns_to_datetime,
     option_expiration_date_to_datetime,
 )
-
-try:
-    from prisma.types import Json  # type: ignore
-except Exception:  # pragma: no cover - fallback when prisma client not generated
-
-    def Json(value):  # type: ignore  # noqa: N802
-        return value
-
-
-from typing import TYPE_CHECKING
-
+from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
-
-if TYPE_CHECKING:  # pragma: no cover
-    from prisma.models import Options, OptionSnapshot  # type: ignore
+from prisma.models import Options, OptionSnapshot
 
 from .decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
@@ -172,8 +160,6 @@ class OptionIngestor:
         last_updated_dt = ns_to_datetime(last_updated_raw) if last_updated_raw else None
         curr_datetime = self.ingest_time
         attempt = 0
-
-        # Parse Greeks data
 
         greeks = None
         if snapshot.greeks:
