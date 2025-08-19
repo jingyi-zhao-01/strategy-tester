@@ -29,6 +29,18 @@ jobs:
           python -m pip install poetry
           poetry install --no-interaction
 
+      - name: Generate Prisma client
+        run: |
+          # Try running prisma from the poetry environment first, fall back to npx if available
+          if poetry run which prisma >/dev/null 2>&1; then
+            poetry run prisma generate
+          elif which npx >/dev/null 2>&1; then
+            npx prisma generate --schema=prisma/schema.prisma
+          else
+            echo "Prisma CLI not found in environment and npx not available" >&2
+            exit 1
+          fi
+
       - name: Run tests and generate coverage.xml
         run: |
           poetry run pytest --cov=./ --cov-report=xml:coverage.xml -q
