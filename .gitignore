@@ -38,4 +38,5 @@ pnpm-lock.yaml
 htmlcov/
 .pytest_cache/
 .sonarlint/
-*.coverage
+
+coverage.xml
