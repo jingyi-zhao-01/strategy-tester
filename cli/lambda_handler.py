@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+from cli.targets import TARGETS
 from lib.log.log import Log
 from options.decorator import traced_span_sync
 from options.ingestor import OptionIngestor
@@ -15,24 +16,6 @@ ingestor = OptionIngestor(option_retriever=retriever)
 # sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "options"))
 
 
-# Replace TARGETS with a list of OptionIngestParams instances
-TARGETS = [
-    OptionIngestParams("NBIS", None, (2025, 2025)),
-    OptionIngestParams("SE", None, (2025, 2025)),
-    OptionIngestParams("NET", None, (2025, 2025)),
-    OptionIngestParams("MU", None, (2025, 2026)),
-    OptionIngestParams("STX", None, (2025, 2026)),
-    OptionIngestParams("AMD", None, (2025, 2025)),
-    OptionIngestParams("CRWV", None, (2025, 2025)),
-    OptionIngestParams("META", None, (2025, 2025)),
-    OptionIngestParams("MP", None, (2025, 2025)),
-    OptionIngestParams("SNOW", None, (2025, 2025)),
-    OptionIngestParams("HOOD", (100, 150), (2025, 2025)),
-    # # ---
-    # OptionIngestParams("FCX", (30, 50), (2025, 2025)),
-]
-
-
 def ping(event, context):
     """Ping function to keep the Lambda warm."""
     return {
@@ -42,8 +25,10 @@ def ping(event, context):
 
 
 def ingest_options_handler(event, context):
+    underlying_assets = [OptionIngestParams(asset[0], asset[1], asset[2]) for asset in TARGETS]
+
     try:
-        asyncio.run(ingestor.ingest_options(TARGETS))
+        asyncio.run(ingestor.ingest_options(underlying_assets=underlying_assets))
         return {
             "statusCode": 200,
             "body": json.dumps({"message": "Options ingestion completed successfully"}),
@@ -76,7 +61,7 @@ def migrate_expired_options_handler(event, context):
 
 
 if __name__ == "__main__":
-    # Log.info("-----------Ingesting options...")
-    # ingest_options_handler(None, None)
+    Log.info("-----------Ingesting options...")
+    ingest_options_handler(None, None)
     Log.info("-----------Ingesting option snapshots...")
     ingest_option_snapshots_handler(None, None)

@@ -13,30 +13,50 @@ __pycache__/
 
 
 # AWS SAM build artifacts
-.aws-sam/
+# Byte-compiled / caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 
-# Node.js
-node_modules/
-npm-debug.log
-yarn-debug.log
-yarn-error.log
-package-lock.json
-pnpm-lock.yaml
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
 
-# Serverless (legacy - can be removed)
-.serverless/
-.webpack/
+# Environment / secrets
+.env
+.env.*
 
-# IDE
+# Editor / IDE
+.vscode/
 .idea/
 *.swp
 *.swo
 
-# Misc
-.DS_Store
+# Logs and reports
+*.log
+app.log
+coverage.xml
 .coverage
 htmlcov/
 .pytest_cache/
-.sonarlint/
 
-coverage.xml
+# Build / distribution
+build/
+dist/
+*.egg-info/
+
+# AWS SAM build artifacts
+.aws-sam/
+
+# ML
+qlib/
+
+# Prisma generated files
+/generated/prisma
+
+
+# Sonar
+.sonarlint/

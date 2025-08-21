@@ -22,7 +22,8 @@ dependencies = [
     "opentelemetry-exporter-otlp (>=1.36.0,<2.0.0)",
     "opentelemetry-instrumentation-requests (>=0.57b0,<0.58)",
     "opentelemetry-instrumentation-httpx (>=0.57b0,<0.58)",
-    "opentelemetry-exporter-otlp-proto-grpc (>=1.36.0,<2.0.0)"
+    "opentelemetry-exporter-otlp-proto-grpc (>=1.36.0,<2.0.0)",
+    "pyqlib (>=0.9.7,<0.10.0)"
 ]
 
 
