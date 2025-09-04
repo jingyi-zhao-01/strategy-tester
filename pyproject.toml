@@ -54,7 +54,7 @@ version = "0.1.0"
 description = ""
 authors = ["Jingyi Zhao <zhao.elton@gmail.com>"]
 readme = "README.md"
-packages = [{ include = "options" }, { include = "lib" }]
+packages = [{ include = "options" }, { include = "lib" }, { include = "cli" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
@@ -71,6 +71,12 @@ pytest = "^8.4.1"
 pytest-cov = "6.2.1"
 pytest-asyncio = "1.1.0"
 ruff = "^0.12.8"
+
+[tool.poetry.scripts]
+strategy-tester = "cli.cli:main"
+
+[project.scripts]
+strategy-tester = "cli.cli:main"
 
 [tool.coverage.run]
 relative_files = true
