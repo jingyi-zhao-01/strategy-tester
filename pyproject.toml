@@ -23,6 +23,8 @@ dependencies = [
     "opentelemetry-instrumentation-requests (>=0.57b0,<0.58)",
     "opentelemetry-instrumentation-httpx (>=0.57b0,<0.58)",
     "opentelemetry-exporter-otlp-proto-grpc (>=1.36.0,<2.0.0)",
+    "opentelemetry-api (>=1.36.0,<2.0.0)",
+    "opentelemetry-sdk (>=1.36.0,<2.0.0)",
     "pyqlib (>=0.9.7,<0.10.0)"
 ]
 
@@ -52,7 +54,7 @@ version = "0.1.0"
 description = ""
 authors = ["Jingyi Zhao <zhao.elton@gmail.com>"]
 readme = "README.md"
-packages = [{ include = "options" }, { include = "lib" }]
+packages = [{ include = "options" }, { include = "lib" }, { include = "cli" }]
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
@@ -61,12 +63,20 @@ polygon-api-client = "1.15.1"
 prisma = "0.15.0"
 pytz = "2025.2"
 python-dotenv = "1.1.1"
+opentelemetry-api = ">=1.36,<2.0"
+opentelemetry-sdk = ">=1.36,<2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
 pytest-cov = "6.2.1"
 pytest-asyncio = "1.1.0"
 ruff = "^0.12.8"
+
+[tool.poetry.scripts]
+strategy-tester = "cli.cli:main"
+
+[project.scripts]
+strategy-tester = "cli.cli:main"
 
 [tool.coverage.run]
 relative_files = true
