@@ -3,14 +3,12 @@ import json
 
 from cli.targets import TARGETS
 from lib.log.log import Log
-from options.decorator import traced_span_sync
 from options.ingestor import OptionIngestor
 from options.models import OptionIngestParams
 from options.retriever import OptionRetriever
 
 retriever = OptionRetriever()
 ingestor = OptionIngestor(option_retriever=retriever)
-
 # Add the project directory to the Python path
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "options"))
@@ -38,7 +36,7 @@ def ingest_options_handler(event, context):
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
 
-@traced_span_sync(name="ingest_option_snapshots", attributes={"module": "ingestor"})
+# @traced_span_sync(name="ingest_option_snapshots", attributes={"module": "ingestor"})
 def ingest_option_snapshots_handler(event, context):
     try:
         asyncio.run(ingestor.ingest_option_snapshots())

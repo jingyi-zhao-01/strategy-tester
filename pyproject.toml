@@ -23,7 +23,8 @@ dependencies = [
     "opentelemetry-instrumentation-requests (>=0.57b0,<0.58)",
     "opentelemetry-instrumentation-httpx (>=0.57b0,<0.58)",
     "opentelemetry-exporter-otlp-proto-grpc (>=1.36.0,<2.0.0)",
-    "pyqlib (>=0.9.7,<0.10.0)"
+    "pyqlib (>=0.9.7,<0.10.0)",
+    "opentelemetry-instrumentation-system-metrics (>=0.57b0,<0.58)"
 ]
 
 
@@ -67,6 +68,9 @@ pytest = "^8.4.1"
 pytest-cov = "6.2.1"
 pytest-asyncio = "1.1.0"
 ruff = "^0.12.8"
+
+[tool.poetry.scripts]
+update_options = "cli.run:main"
 
 [tool.coverage.run]
 relative_files = true

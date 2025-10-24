@@ -1,7 +1,7 @@
-import pytest
-
 # Skip running this integration-only module during unit tests
-pytest.skip("integration-only script; skip during unit tests", allow_module_level=True)
+# pytest.skip("integration-only script; skip during unit tests", allow_module_level=True)
+
+import asyncio
 
 from lib.log.log import Log
 from options.api.options import Fetcher
@@ -15,18 +15,19 @@ def test_fetch():
     core.get_call_contracts()
 
 
-@traced_span_async(name="mock_db_upsert", attributes={"testcase": "db"})
-async def mock_db_upsert(snapshot):
-    import asyncio
+# @traced_span_async(name="mock_db_upsert", attributes={"testcase": "db"})
+# async def mock_db_upsert(snapshot):
 
-    await asyncio.sleep(1)  # Simulate DB latency
+#     await asyncio.sleep(1)  # Simulate DB latency
+#     await asyncio.sleep(1)  # Simulate DB latency
 
 
 @traced_span_async(name="test_polygon", attributes={"testcase": "decorator"})
 async def test_fetch_async():
     core = Fetcher("AAPL")
     snapshot = await core.fetch_daily_snapshot_async("NBIS", "O:NBIS251121C00070000")
-    await mock_db_upsert(snapshot)
+    Log.info(f"Fetched snapshot: {snapshot}")
+    # await mock_db_upsert(snapshot)
 
 
 if __name__ == "__main__":

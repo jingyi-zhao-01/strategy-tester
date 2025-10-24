@@ -16,6 +16,7 @@ from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from prisma.models import Options, OptionSnapshot
 
+from .api.options import fetch_snapshots_batch
 from .decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
     bounded_async_sem,
@@ -74,7 +75,6 @@ class OptionIngestor:
             async for contracts_batch in self.option_retriever.stream_retrieve_active():
                 Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
                 total_contracts += len(contracts_batch)
-                fetch_snapshots_batch = import_module("options.api.options").fetch_snapshots_batch  # type: ignore
                 snapshots = await fetch_snapshots_batch(contracts_batch)
                 await asyncio.gather(
                     *[

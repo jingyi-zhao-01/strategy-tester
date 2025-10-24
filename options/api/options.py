@@ -10,6 +10,7 @@ from lib.log.log import Log
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options  # type: ignore
 
+
 from ..decorator import bounded_async_sem, traced_span_async, traced_span_sync
 from ..models import OptionContractSnapshot, OptionsContract
 from ..util import parse_option_symbol
@@ -73,6 +74,9 @@ class Fetcher:
             try:
                 response = await client.get(url)
                 response.raise_for_status()
+                Log.info(
+                    f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
+                )
                 return OptionContractSnapshot.from_dict(response.json().get("results"))
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == NOT_FOUND_STATUS_CODE:
