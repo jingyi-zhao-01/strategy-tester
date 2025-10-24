@@ -1,4 +1,3 @@
-import logging
 import os
 import subprocess
 import sys
@@ -22,10 +21,6 @@ def main():
 
     # Run the command with the loaded environment
     subprocess.run(cmd, env=env, check=False)
-
-    # Ensure log handlers are flushed and closed to avoid shutdown errors
-
-    logging.shutdown()
 
 
 if __name__ == "__main__":
