@@ -1,6 +1,8 @@
 import atexit
 import logging
+import os
 import pathlib
+from tkinter import NONE
 
 from dotenv import load_dotenv
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
@@ -10,6 +12,14 @@ from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
 load_dotenv()
 
+
+GRAFANA_SERVICE_NAME = os.getenv("GRAFANA_SERVICE_NAME", NONE)
+
+
+if GRAFANA_SERVICE_NAME is NONE:
+    raise ValueError("GRAFANA_SERVICE_NAME environment variable is not set")
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s",
@@ -17,7 +27,7 @@ logging.basicConfig(
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-logger = logging.getLogger("strategy-tester")
+logger = logging.getLogger(GRAFANA_SERVICE_NAME)
 logger.setLevel(logging.INFO)
 
 formatter = logging.Formatter(
@@ -26,7 +36,7 @@ formatter = logging.Formatter(
 )
 
 # Set up OpenTelemetry logging with structured fields
-resource = Resource(attributes={SERVICE_NAME: "strategy-tester"})
+resource = Resource(attributes={SERVICE_NAME: GRAFANA_SERVICE_NAME})
 otel_logger_provider = LoggerProvider(resource=resource)
 otlp_exporter = OTLPLogExporter()
 otel_logger_provider.add_log_record_processor(

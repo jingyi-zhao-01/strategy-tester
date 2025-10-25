@@ -3,7 +3,7 @@
 
 import asyncio
 
-from lib.log.log import Log
+from lib.observability import Log
 from options.api.options import Fetcher
 from options.decorator import traced_span_async
 

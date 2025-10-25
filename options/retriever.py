@@ -1,15 +1,15 @@
 # TODO: Isolate
 from collections.abc import AsyncGenerator
+from importlib import import_module
+from typing import TYPE_CHECKING
 
-from lib import Log
+from lib.observability import Log
 from options.decorator import (
     CONCURRENCY_LIMIT,
     OPTION_BATCH_RETRIEVAL_SIZE,
     bounded_db_connection,
     traced_span_asyncgen,
 )
-from typing import TYPE_CHECKING
-from importlib import import_module
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options  # type: ignore
@@ -35,8 +35,8 @@ class OptionRetriever:
     @bounded_db_connection
     async def retrieve_all(self) -> list["Options"]:
         try:
-            Options = import_module("prisma.models").Options  # type: ignore
-            contracts = await Options.prisma().find_many()
+            options_model = import_module("prisma.models").Options  # type: ignore
+            contracts = await options_model.prisma().find_many()
             Log.info(f"Retrieved {len(contracts)} unexpired option contracts from the database.")
             return contracts
         except Exception as e:
@@ -46,13 +46,15 @@ class OptionRetriever:
     # #TODO: bound iterator with db
     # @bounded_db
     @traced_span_asyncgen(name="stream_retrieve_active", attributes={"module": "NEON"})
-    async def stream_retrieve_active(self, *args, **kwargs) -> AsyncGenerator[list["Options"], None]:
+    async def stream_retrieve_active(
+        self, *args, **kwargs
+    ) -> AsyncGenerator[list["Options"], None]:
         try:
-            Options = import_module("prisma.models").Options  # type: ignore
+            options_model = import_module("prisma.models").Options  # type: ignore
             Log.info(f"Starting active contract retrieval for ingest session: {self.ingest_time}")
             offset = 0
             while True:
-                batch = await Options.prisma().find_many(
+                batch = await options_model.prisma().find_many(
                     skip=offset,
                     take=OPTION_BATCH_RETRIEVAL_SIZE,
                     where={"expiration_date": {"gte": self.ingest_time}},

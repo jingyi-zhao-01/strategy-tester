@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import httpx
 from polygon import RESTClient
 
-from lib.log.log import Log
+from lib.observability import Log
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options  # type: ignore

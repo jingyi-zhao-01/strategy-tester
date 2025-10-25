@@ -4,7 +4,7 @@ import traceback
 # Avoid hard dependency bindings to enable unit tests to monkeypatch via module paths
 from importlib import import_module
 
-from lib import Log
+from lib.observability import Log
 from options.errors import OptionTickerNeverActiveError
 from options.util import (
     format_snapshot,

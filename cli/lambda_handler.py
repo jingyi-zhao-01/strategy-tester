@@ -2,7 +2,7 @@ import asyncio
 import json
 
 from cli.targets import TARGETS
-from lib.log.log import Log
+from lib.observability import Log
 from options.ingestor import OptionIngestor
 from options.models import OptionIngestParams
 from options.retriever import OptionRetriever
