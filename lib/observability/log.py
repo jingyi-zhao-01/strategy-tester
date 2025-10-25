@@ -1,8 +1,9 @@
 import atexit
+import contextlib
 import logging
 
-from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
@@ -12,14 +13,19 @@ class _LoggerState:
 
     _otel_logger_provider: LoggerProvider | None = None
     _logger: logging.Logger | None = None
+    _otel_handler: LoggingHandler | None = None
 
     @classmethod
     def set_providers(
-        cls, logger: logging.Logger, otel_provider: LoggerProvider | None = None
+        cls,
+        logger: logging.Logger | None,
+        otel_provider: LoggerProvider | None = None,
+        otel_handler: LoggingHandler | None = None,
     ) -> None:
         """Set both logger and OTEL provider."""
         cls._logger = logger
         cls._otel_logger_provider = otel_provider
+        cls._otel_handler = otel_handler
 
     @classmethod
     def get_logger(cls) -> logging.Logger | None:
@@ -31,16 +37,54 @@ class _LoggerState:
         """Get the configured OTEL provider."""
         return cls._otel_logger_provider
 
+    @classmethod
+    def get_otel_handler(cls) -> LoggingHandler | None:
+        """Get the configured OTEL handler."""
+        return cls._otel_handler
+
 
 def _shutdown_otel():
     """Gracefully shutdown OpenTelemetry logger provider before Python shutdown."""
     provider = _LoggerState.get_otel_provider()
+    handler = _LoggerState.get_otel_handler()
+    logger = _LoggerState.get_logger()
+
+    # Remove the OTEL handler from logger to prevent threading issues during shutdown
+    if logger and handler and handler in logger.handlers:
+        logger.removeHandler(handler)
+
     if provider is not None:
-        try:
-            provider.force_flush(timeout_millis=5000)
-            provider.shutdown()
-        except Exception:
-            pass  # Silently ignore errors during shutdown
+        with contextlib.suppress(Exception):
+            # Force flush without creating new threads during shutdown
+            provider.force_flush(timeout_millis=1000)  # Shorter timeout
+            # Don't call shutdown() as it may create threads during interpreter shutdown
+
+
+# Monkey patch the LoggingHandler.flush to prevent threading during shutdown
+_original_flush = None
+
+
+def _safe_flush(self):
+    """Safe flush that doesn't create threads during shutdown."""
+    try:
+        if _original_flush:
+            _original_flush(self)
+    except RuntimeError as e:
+        if "can't create new thread at interpreter shutdown" in str(e):
+            # Silently ignore threading errors during shutdown
+            pass
+        else:
+            raise
+
+
+# Patch the flush method to be safe during shutdown
+try:
+    from opentelemetry.sdk._logs._internal import LoggingHandler
+
+    _original_flush = LoggingHandler.flush
+    LoggingHandler.flush = _safe_flush
+except ImportError:
+    pass
 
 
 def configure_logging(
@@ -87,12 +131,14 @@ def configure_logging(
         logger.addHandler(console_handler)
 
     otel_provider = None
+    otel_handler: LoggingHandler | None = None
 
     # Configure OpenTelemetry if enabled
     if enable_otel:
         try:
             resource = Resource(attributes={SERVICE_NAME: service_name})
             otel_provider = LoggerProvider(resource=resource)
+            # Use HTTP/protobuf protocol for OTLP
             otlp_exporter = OTLPLogExporter()
             otel_provider.add_log_record_processor(
                 BatchLogRecordProcessor(
@@ -101,13 +147,18 @@ def configure_logging(
                     schedule_delay_millis=5000,  # Export every 5 seconds
                 )
             )
+
+            # Add OTEL logging handler to bridge Python logging to OTEL
+            otel_handler = LoggingHandler(level=log_level, logger_provider=otel_provider)
+            logger.addHandler(otel_handler)
+
             # Register shutdown handler to run before Python's logging shutdown
             atexit.register(_shutdown_otel)
         except Exception as e:
             logger.warning(f"Failed to initialize OpenTelemetry: {e}")
 
     # Store in state holder instead of using global
-    _LoggerState.set_providers(logger, otel_provider)
+    _LoggerState.set_providers(logger, otel_provider, otel_handler if enable_otel else None)
 
     return logger
 
