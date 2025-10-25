@@ -1,11 +1,17 @@
 import asyncio
 import json
 
-from cli.targets import TARGETS
-from lib.observability import Log
-from options.ingestor import OptionIngestor
-from options.models import OptionIngestParams
-from options.retriever import OptionRetriever
+from dotenv import load_dotenv
+
+# Load environment variables BEFORE importing modules that use Prisma
+load_dotenv()
+
+# noinspection PyUnresolvedReference
+from cli.targets import TARGETS  # noqa: E402
+from lib.observability import Log  # noqa: E402
+from options.ingestor import OptionIngestor  # noqa: E402
+from options.models import OptionIngestParams  # noqa: E402
+from options.retriever import OptionRetriever  # noqa: E402
 
 retriever = OptionRetriever()
 ingestor = OptionIngestor(option_retriever=retriever)
