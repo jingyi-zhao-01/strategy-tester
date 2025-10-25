@@ -39,7 +39,12 @@ def bounded_db_connection(func):
     async def wrapper(*args, **kwargs):
         client = db
         if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
-            await client.connect()
+            try:
+                # Log.debug("Prisma connect() sees DATABASE_URL = %s", os.getenv("DATABASE_URL"))
+                await client.connect()
+            except Exception:
+                # Log.debug("Prisma connect() failed: %s", e)
+                raise
             try:
                 return await func(*args, **kwargs)
             finally:

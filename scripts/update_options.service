@@ -1,0 +1,17 @@
+[Unit]
+Description=Run update_options
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jingyi/PycharmProjects/strategy-tester
+
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+
+# 2. Load all sensitive runtime vars (DB url, API keys, OTEL, etc)
+EnvironmentFile=/home/jingyi/PycharmProjects/strategy-tester/.env
+
+ExecStart=/home/jingyi/PycharmProjects/strategy-tester/scripts/update_options.zsh
+
+[Install]
+WantedBy=default.target
+

@@ -1,10 +1,13 @@
 import asyncio
 import json
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load environment variables BEFORE importing modules that use Prisma
-load_dotenv()
+# Load environment variables BEFORE importing modules that use Prisma.
+# Resolve the project root explicitly so systemd WorkingDirectory doesn't matter.
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(dotenv_path=_PROJECT_ROOT / ".env")
 
 # noinspection PyUnresolvedReference
 from cli.targets import TARGETS  # noqa: E402
