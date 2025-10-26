@@ -2,7 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from options.ingestor import OptionIngestor, OptionTickerNeverActiveError
+from options.errors import OptionTickerNeverActiveError
+from options.ingestor import OptionIngestor, OptionSnapshotsIngestor
 from options.models import OptionIngestParams, OptionsContract
 
 
@@ -24,6 +25,11 @@ def ingestor(mock_option_retriever):
     return OptionIngestor(option_retriever=mock_option_retriever)
 
 
+@pytest.fixture
+def snapshots_ingestor(mock_option_retriever):
+    return OptionSnapshotsIngestor(option_retriever=mock_option_retriever)
+
+
 @pytest.mark.asyncio
 async def test_ingest_options_empty(monkeypatch, ingestor):
     monkeypatch.setattr(
@@ -37,8 +43,8 @@ async def test_ingest_options_empty(monkeypatch, ingestor):
 
 
 @pytest.mark.asyncio
-async def test_ingest_option_snapshots_empty(ingestor):
-    await ingestor.ingest_option_snapshots()
+async def test_ingest_option_snapshots_empty(snapshots_ingestor):
+    await snapshots_ingestor.ingest_option_snapshots()
 
 
 @pytest.mark.asyncio
@@ -77,18 +83,23 @@ async def test_upsert_option_contract_error(ingestor):
 
 
 @pytest.mark.asyncio
-async def test_upsert_option_snapshot_ticker_never_active(ingestor):
+async def test_upsert_option_snapshot_ticker_never_active(snapshots_ingestor):
     with patch("prisma.models.OptionSnapshot.prisma") as mock_prisma:
         mock_prisma.return_value.upsert = AsyncMock(side_effect=OptionTickerNeverActiveError)
         snapshot = MagicMock()
         snapshot.day = MagicMock()
         snapshot.greeks = None
-        await ingestor._upsert_option_snapshot("TST", snapshot)
+        await snapshots_ingestor._upsert_option_snapshot("TST", snapshot)
 
 
 def test_option_ingestor_requires_retriever():
     with pytest.raises(ValueError):
         OptionIngestor(option_retriever=None)
+
+
+def test_option_snapshots_ingestor_requires_retriever():
+    with pytest.raises(ValueError):
+        OptionSnapshotsIngestor(option_retriever=None)
 
 
 # @pytest.mark.asyncio

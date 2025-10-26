@@ -13,7 +13,7 @@ load_dotenv(dotenv_path=_ENV_PATH)
 
 # noinspection PyUnresolvedReference
 from lib.observability import Log, configure_logging  # noqa: E402
-from options.ingestor import OptionIngestor  # noqa: E402
+from options.ingestor import OptionSnapshotsIngestor  # noqa: E402
 from options.retriever import OptionRetriever  # noqa: E402
 
 # Configure logging with OTEL enabled
@@ -26,7 +26,7 @@ configure_logging(
 def main():
     """Ingest option snapshots (market data) for all active option contracts."""
     retriever = OptionRetriever()
-    ingestor = OptionIngestor(option_retriever=retriever)
+    ingestor = OptionSnapshotsIngestor(option_retriever=retriever)
 
     try:
         Log.info("-----------Starting option snapshots ingestion...")

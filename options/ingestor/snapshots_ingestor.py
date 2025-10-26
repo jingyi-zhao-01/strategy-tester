@@ -1,127 +1,55 @@
+"""Ingestor for option snapshots (market data, greeks, etc.)."""
+
 import asyncio
 import traceback
-
-# Avoid hard dependency bindings to enable unit tests to monkeypatch via module paths
-from importlib import import_module
 
 from lib.observability import Log
 from options.errors import OptionTickerNeverActiveError
 from options.util import (
     format_snapshot,
-    get_current_datetime,
     ns_to_datetime,
-    option_expiration_date_to_datetime,
 )
 from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
-from prisma.models import Options, OptionSnapshot
+from prisma.models import OptionSnapshot
 
-from .api.options import fetch_snapshots_batch
-from .decorator import (
+from ..api.options import fetch_snapshots_batch
+from ..decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
     bounded_async_sem,
     bounded_db_connection,
     traced_span_async,
 )
-from .models import OptionContractSnapshot, OptionIngestParams, OptionsContract
-from .retriever import OptionRetriever
+from ..models import OptionContractSnapshot
+from .option_contract_ingestor import OptionIngestor
 
 
-class OptionIngestor:
-    """Base class for option ingestion operations."""
-
-    def __init__(self, option_retriever=None):
-        self.ingest_time = get_current_datetime()
-
-        if option_retriever is None:
-            raise ValueError("option_retriever must be provided")
-
-        self.option_retriever: OptionRetriever = option_retriever.with_ingest_time(self.ingest_time)
+class OptionSnapshotsIngestor(OptionIngestor):
+    """Ingestor specifically for option snapshots (market data, greeks, etc.)."""
 
     @bounded_db_connection
-    @traced_span_async(name="ingest_options", attributes={"module": "ingestor"})
-    async def ingest_options(self, underlying_assets: list[OptionIngestParams]):
-        """Ingest option contracts from the API and store them in the database."""
-        for target in underlying_assets:
-            underlying_asset = target.underlying_asset
-            # price_range = target.price_range
-            # year_range = target.year_range
-            fetcher = import_module("options.api.options").Fetcher  # type: ignore
-            core = fetcher(underlying_asset)
-            calls = core.get_call_contracts()
-            puts = core.get_put_contracts()
-
-            contracts = calls + puts
-            Log.info(f"Total contracts found for {underlying_asset}: {len(contracts)}")
-            if not contracts:
-                Log.warn(f"No UnExpired contracts found for {underlying_asset}")
-                continue
-
-            # contracts_within_range = get_contract_within_price_range(
-            #     contracts, price_range, year_range
-            # )
-            # Log.info(
-            #     f"Contracts within price range for {underlying_asset}: "
-            #     f"{len(contracts_within_range)}"
-            # )
-
-            await asyncio.gather(
-                *[self._upsert_option_contract(contract) for contract in contracts]
-            )
-            Log.info(f"All contracts for {underlying_asset} processed successfully")
-
-    async def _retrieve_all_option_contracts(self) -> list["Options"]:
+    @traced_span_async(name="ingest_option_snapshots", attributes={"module": "ingestor"})
+    async def ingest_option_snapshots(self):
+        """Ingest option snapshots for all active contracts."""
         try:
-            options = import_module("prisma.models").Options  # type: ignore
-            contracts = await options.prisma().find_many()
-            Log.info(f"Retrieved {len(contracts)} option contracts from the database.")
-            return contracts
-        except Exception as e:
-            Log.error(f"Error fetching option contracts: {e}")
-            return []
-
-    @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
-    @traced_span_async(name="_upsert_option_contract", attributes={"module": "DB"})
-    async def _upsert_option_contract(self, contract: OptionsContract) -> "Options":
-        expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
-        try:
+            total_contracts = 0
+            async for contracts_batch in self.option_retriever.stream_retrieve_active():
+                Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
+                total_contracts += len(contracts_batch)
+                snapshots = await fetch_snapshots_batch(contracts_batch)
+                await asyncio.gather(
+                    *[
+                        self._upsert_option_snapshot(contract.ticker, snapshot)
+                        for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
+                    ]
+                )
             Log.info(
-                f"Upserting contract: {contract.ticker}, "
-                f"Strike: {contract.strike_price}, "
-                f"Expiration: {expiration_dt}, "
-                f"Type: {contract.contract_type}"
-            )
-            options = import_module("prisma.models").Options  # type: ignore
-            return await options.prisma().upsert(
-                where={"ticker": str(contract.ticker)},
-                data={
-                    "create": {
-                        "ticker": str(contract.ticker),
-                        "underlying_ticker": str(contract.underlying_ticker),
-                        "strike_price": (
-                            float(contract.strike_price)
-                            if contract.strike_price is not None
-                            else 0.0
-                        ),
-                        "expiration_date": expiration_dt,
-                        "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
-                    },
-                    "update": {
-                        "underlying_ticker": str(contract.underlying_ticker),
-                        "strike_price": (
-                            float(contract.strike_price)
-                            if contract.strike_price is not None
-                            else 0.0
-                        ),
-                        "expiration_date": expiration_dt,
-                        "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
-                    },
-                },
+                f"All option snapshots processed successfully. "
+                f"Total contracts processed: {total_contracts}"
             )
         except Exception as e:
-            Log.error(f"Error upserting contract {contract.ticker}: {e} ({type(e).__name__})")
-            Log.error(traceback.format_exc())
-            raise
+            Log.error(f"Error during option snapshots ingestion: {e}\n{traceback.format_exc()}")
+            # Do not re-raise to avoid duplicate logging and empty error messages
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
     @traced_span_async(name="_upsert_option_snapshot", attributes={"module": "DB"})
@@ -132,6 +60,7 @@ class OptionIngestor:
         max_retries: int = 1,
         delay: float = 1.0,
     ) -> "OptionSnapshot | None":
+        """Upsert a single option snapshot into the database."""
         last_updated_raw = (
             snapshot.day.last_updated
             if snapshot.day is not None and snapshot.day.last_updated
@@ -211,7 +140,6 @@ class OptionIngestor:
                             "day_change": (
                                 snapshot.day.change_percent if snapshot.day is not None else None
                             ),
-                            # "option": {"connect": {"ticker": contract_ticker}},
                         },
                     },
                 )
@@ -228,7 +156,6 @@ class OptionIngestor:
                 Log.info(f"{contract_ticker} is not active")
                 break
             except ClientNotConnectedError as e:
-                # TODO: figure out a way inccacse database connecting error
                 Log.error(f"Database connection error: {e}. Retrying up to {max_retries} times...")
                 break
             except Exception as e:
@@ -247,32 +174,4 @@ class OptionIngestor:
                     )
 
 
-class OptionSnapshotsIngestor(OptionIngestor):
-    """Ingestor specifically for option snapshots (market data, greeks, etc.)."""
-
-    @bounded_db_connection
-    @traced_span_async(name="ingest_option_snapshots", attributes={"module": "ingestor"})
-    async def ingest_option_snapshots(self):
-        """Ingest option snapshots for all active contracts."""
-        try:
-            total_contracts = 0
-            async for contracts_batch in self.option_retriever.stream_retrieve_active():
-                Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
-                total_contracts += len(contracts_batch)
-                snapshots = await fetch_snapshots_batch(contracts_batch)
-                await asyncio.gather(
-                    *[
-                        self._upsert_option_snapshot(contract.ticker, snapshot)
-                        for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
-                    ]
-                )
-            Log.info(
-                f"All option snapshots processed successfully. "
-                f"Total contracts processed: {total_contracts}"
-            )
-        except Exception as e:
-            Log.error(f"Error during option snapshots ingestion: {e}\n{traceback.format_exc()}")
-            # Do not re-raise to avoid duplicate logging and empty error messages
-
-
-__all__ = ["OptionIngestor", "OptionSnapshotsIngestor"]
+__all__ = ["OptionSnapshotsIngestor"]

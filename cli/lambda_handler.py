@@ -12,12 +12,13 @@ load_dotenv(dotenv_path=_PROJECT_ROOT / ".env")
 # noinspection PyUnresolvedReference
 from cli.targets import TARGETS  # noqa: E402
 from lib.observability import Log  # noqa: E402
-from options.ingestor import OptionIngestor  # noqa: E402
+from options.ingestor import OptionIngestor, OptionSnapshotsIngestor  # noqa: E402
 from options.models import OptionIngestParams  # noqa: E402
 from options.retriever import OptionRetriever  # noqa: E402
 
 retriever = OptionRetriever()
 ingestor = OptionIngestor(option_retriever=retriever)
+snapshots_ingestor = OptionSnapshotsIngestor(option_retriever=retriever)
 # Add the project directory to the Python path
 # sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 # sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "options"))
@@ -48,7 +49,7 @@ def ingest_options_handler(event, context):
 # @traced_span_sync(name="ingest_option_snapshots", attributes={"module": "ingestor"})
 def ingest_option_snapshots_handler(event, context):
     try:
-        asyncio.run(ingestor.ingest_option_snapshots())
+        asyncio.run(snapshots_ingestor.ingest_option_snapshots())
         return {
             "statusCode": 200,
             "body": json.dumps({"message": "Option snapshots ingestion completed successfully"}),

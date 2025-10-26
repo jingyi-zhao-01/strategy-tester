@@ -21,17 +21,20 @@ The option snapshots ingestion service began failing with PostgreSQL internal er
 ## Impact Assessment
 
 ### Systems Affected
+
 - ✗ `ingest_snapshots` service (100% failure rate)
 - ✓ `ingest_options` service (unaffected)
 - ✓ Database infrastructure (healthy)
 - ✓ API connectivity (healthy)
 
 ### Data Impact
+
 - **No data loss**: Existing data remained intact
 - **Ingestion gap**: ~6 hours of missing snapshot data (8:00 PM Oct 25 - 2:18 AM Oct 26)
 - **Recovery**: Service restored, data backfill may be needed
 
 ### Business Impact
+
 - Real-time option market data unavailable for analysis
 - Trading strategy backtests using latest data would be incomplete
 - No customer-facing impact (internal system)
@@ -41,7 +44,9 @@ The option snapshots ingestion service began failing with PostgreSQL internal er
 ## Timeline
 
 ### Background Events
+
 **October 25, 2025**
+
 - **12:00 PM PDT**: Service working normally with `DATA_BASE_CONCURRENCY_LIMIT = 700`
 - **5:28 PM PDT**: Commit `4325c69` - "avoiding bursting prisma connection limits"
   - Changed connection management to reuse single connection
@@ -54,12 +59,16 @@ The option snapshots ingestion service began failing with PostgreSQL internal er
   - May have left stale connection state
 
 ### Incident Events
+
 **October 26, 2025**
+
 - **02:00 AM PDT**: Service failing with PostgreSQL XX000 errors
+
   ```
   Error: variable not found in subplan target list
   Code: XX000 (Internal Error)
   ```
+
 - **02:04 AM**: Investigation started
   - Observed: Multiple snapshot upserts failing with same error
   - Pattern: All failures occurred during database write operation
@@ -121,12 +130,14 @@ await OptionSnapshot.prisma().upsert(
 ```
 
 **Why this is problematic**:
+
 1. The `connect` clause tells Prisma to create a subquery: `SELECT id FROM options WHERE ticker = ?`
 2. This subquery is nested within the complex upsert operation
 3. Upsert with composite primary key `@@id([ticker, last_updated])` is already complex
 4. PostgreSQL's query planner must coordinate multiple subqueries
 
 **Generated SQL approximation**:
+
 ```sql
 INSERT INTO option_snapshots (...)
 VALUES (...)
@@ -137,12 +148,14 @@ ON CONFLICT (ticker, last_updated) DO UPDATE ...
 ### Why It Worked Before (Oct 25, 12:00 PM)
 
 **Configuration**:
+
 ```python
 DATA_BASE_CONCURRENCY_LIMIT = 700  # High limit
 # No semaphore wrapper on bounded_db_connection
 ```
 
 **Conditions**:
+
 - ✅ High concurrency limit (700) meant less queueing
 - ✅ No artificial bottleneck on database operations
 - ✅ Connection pool had breathing room
@@ -152,6 +165,7 @@ DATA_BASE_CONCURRENCY_LIMIT = 700  # High limit
 ### Why It Failed After (Oct 25, 5:58 PM onwards)
 
 **Configuration change (commit `145a79b`)**:
+
 ```python
 DATA_BASE_CONCURRENCY_LIMIT = 100  # Reduced from 700
 _db_semaphore = asyncio.Semaphore(100)
@@ -161,6 +175,7 @@ async with _db_semaphore:  # New bottleneck added
 ```
 
 **New conditions**:
+
 - ❌ Low concurrency limit (100) creates heavy queueing
 - ❌ 500 tasks competing for 100 slots
 - ❌ Increased connection pool pressure
@@ -183,6 +198,7 @@ XX000: "variable not found in subplan target list"
 ```
 
 **PostgreSQL Error Code XX000**: Internal Error
+
 - Indicates a bug or edge case in PostgreSQL itself
 - Usually triggered by unusual query patterns
 - Often related to query planner optimization failures
@@ -204,6 +220,7 @@ await OptionSnapshot.prisma().upsert(
 ```
 
 **Why this is better**:
+
 1. ✅ No subquery needed - `ticker` is directly set
 2. ✅ Foreign key relationship still maintained (defined in Prisma schema)
 3. ✅ Simpler query plan for PostgreSQL
@@ -211,6 +228,7 @@ await OptionSnapshot.prisma().upsert(
 5. ✅ Better performance (no extra SELECT)
 
 **Schema proof** (from `prisma/schema.prisma`):
+
 ```prisma
 model OptionSnapshot {
   ticker        String
@@ -218,6 +236,7 @@ model OptionSnapshot {
   ...
 }
 ```
+
 The `@relation(fields: [ticker], ...)` means `ticker` IS the foreign key, so setting it directly establishes the relationship.
 
 ---
@@ -227,6 +246,7 @@ The `@relation(fields: [ticker], ...)` means `ticker` IS the foreign key, so set
 ### Prisma Relation Patterns
 
 #### When to Use `connect`
+
 ```python
 # Use case: Foreign key is NOT exposed in model
 model OptionSnapshot {
@@ -241,6 +261,7 @@ model OptionSnapshot {
 ```
 
 #### When to Use Direct Assignment
+
 ```python
 # Use case: Foreign key IS exposed (your case)
 model OptionSnapshot {
@@ -257,18 +278,21 @@ model OptionSnapshot {
 ### PostgreSQL Query Planner Behavior
 
 **Under Normal Load** (before concurrency change):
+
 1. Query planner uses optimal path
 2. Subquery is materialized first
 3. Upsert proceeds smoothly
 4. Plan cached for reuse
 
 **Under High Pressure** (after concurrency change):
+
 1. Query planner takes different optimization path
 2. Connection state may be inconsistent
 3. Subquery variable resolution fails in certain plan variants
 4. Internal error XX000 thrown
 
 **Known PostgreSQL Issues**:
+
 - Complex CTEs with upsert can trigger planner bugs
 - Nested subqueries in ON CONFLICT clauses are fragile
 - Connection poolers can affect query plan caching
@@ -276,21 +300,25 @@ model OptionSnapshot {
 ### Neon Connection Pooler Impact
 
 **Neon's Architecture**:
+
 ```
 Application → Connection Pooler → PostgreSQL
             (Transparent proxy)
 ```
 
 **Pooler behaviors that can affect query planning**:
+
 1. **Connection reuse**: Different sessions may get different cached plans
 2. **Statement pooling**: Query strings are cached and reused
 3. **Transaction pooling**: Each transaction gets a potentially different connection
 4. **Plan cache inconsistency**: Pooler doesn't preserve PostgreSQL's query plan cache
 
 **Your configuration**:
+
 ```bash
 DATABASE_URL="...@ep-snowy-silence-adv2fbdg-pooler.c-2.us-east-1.aws.neon.tech/...?connection_limit=1200"
 ```
+
 The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 
 ---
@@ -309,6 +337,7 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### Detailed Changes
 
 #### Commit 4325c69 (Oct 25, 5:28 PM)
+
 **"avoiding bursting prisma connection limits"**
 
 ```diff
@@ -335,6 +364,7 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 **Risk**: Lower - actually improved connection efficiency.
 
 #### Commit 145a79b (Oct 25, 5:58 PM) ⚠️
+
 **"enhance concurrency connection"**
 
 ```diff
@@ -347,7 +377,8 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 +     return await func(*args, **kwargs)
 ```
 
-**Impact**: 
+**Impact**:
+
 - ❌ Reduced concurrency by 85% (700 → 100)
 - ❌ Added semaphore bottleneck
 - ✅ Added monitoring (good)
@@ -362,20 +393,24 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### 1. Code Quality & Patterns
 
 #### Issue: Unnecessary Use of `connect`
+
 - **Problem**: Used `connect` when direct assignment would work
 - **Root Cause**: Unclear documentation on when to use `connect` vs direct assignment
 - **Fix**: ✅ Implemented - removed `connect` clause
 
 **Action Items**:
+
 - [ ] Create coding guidelines: "Prisma Relation Patterns Best Practices"
 - [ ] Add linting rule to detect unnecessary `connect` usage
 - [ ] Code review checklist item: "Verify relation pattern choice"
 
 #### Issue: Complex Upsert Queries
+
 - **Problem**: Upsert with composite key + relations is complex
 - **Consideration**: Could we simplify the data model?
 
 **Action Items**:
+
 - [ ] Review if composite primary key `@@id([ticker, last_updated])` is necessary
 - [ ] Consider using auto-increment ID + unique index instead
 - [ ] Document query complexity concerns for future schema changes
@@ -383,20 +418,24 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### 2. Testing & Validation
 
 #### Issue: No Integration Tests for Upsert Operations
+
 - **Problem**: Bug existed in production code without detection
 - **Root Cause**: Unit tests don't exercise real database operations
 
 **Action Items**:
+
 - [ ] Add integration test suite for upsert operations
 - [ ] Test upsert under concurrent load
 - [ ] Test with production-like connection pooling
 - [ ] Include test cases for both `connect` and direct assignment patterns
 
 #### Issue: No Load Testing Before Concurrency Changes
+
 - **Problem**: Concurrency limit reduction deployed without validation
 - **Risk**: Changes that work in dev may fail under production load
 
 **Action Items**:
+
 - [ ] Create load testing harness for ingestion services
 - [ ] Establish baseline performance metrics
 - [ ] Require load test before deploying concurrency changes
@@ -405,20 +444,24 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### 3. Configuration Management
 
 #### Issue: Concurrency Limits Changed Without Gradual Rollout
+
 - **Problem**: Immediate 85% reduction (700 → 100) was too aggressive
 - **Better Approach**: Gradual reduction with monitoring
 
 **Action Items**:
+
 - [ ] Implement feature flags for concurrency limits
 - [ ] Create runbook for adjusting concurrency safely
 - [ ] Add A/B testing framework for configuration changes
 - [ ] Document safe rollback procedures
 
 #### Issue: Connection Limit Mismatch
+
 - **Current**: URL has `connection_limit=1200`, code uses `100`
 - **Gap**: 1100 connections available but unused
 
 **Action Items**:
+
 - [ ] Align connection_limit in URL with DATA_BASE_CONCURRENCY_LIMIT
 - [ ] Document why there's a difference (if intentional)
 - [ ] Consider environment-specific limits (dev vs prod)
@@ -426,10 +469,12 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### 4. Monitoring & Observability
 
 #### Issue: No Alerting on Query Errors
+
 - **Problem**: Service failed for hours without immediate alert
 - **Gap**: PostgreSQL errors not monitored
 
 **Action Items**:
+
 - [x] ✅ Connection pool monitoring added (commit 145a79b)
 - [ ] Add alerting on PostgreSQL XX000 errors
 - [ ] Monitor upsert success/failure rates
@@ -437,10 +482,12 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 - [ ] Add SLO for data freshness
 
 #### Issue: Limited Query Performance Visibility
+
 - **Problem**: Can't see which queries are slow/problematic
 - **Gap**: No query performance tracking
 
 **Action Items**:
+
 - [ ] Enable Prisma query logging in development
 - [ ] Add OpenTelemetry tracing for database operations (started)
 - [ ] Create slow query alert
@@ -449,20 +496,24 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### 5. Database Architecture
 
 #### Issue: Complex Query Pattern Fragility
+
 - **Problem**: Sensitive to PostgreSQL query planner behavior
 - **Root Cause**: Complex nested queries with connection pooler
 
 **Action Items**:
+
 - [ ] Review if simpler schema would help (see "Complex Upsert" above)
 - [ ] Consider direct SQL for critical paths
 - [ ] Document known fragile query patterns
 - [ ] Establish query complexity budgets
 
 #### Issue: Connection Pooler Hidden Complexity
+
 - **Problem**: Neon pooler behavior affects query planning
 - **Gap**: Team understanding of pooler internals
 
 **Action Items**:
+
 - [ ] Document Neon pooler behavior and limitations
 - [ ] Test with direct connection (non-pooled) for comparison
 - [ ] Consider if pooler mode should change (transaction vs session)
@@ -471,20 +522,24 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### 6. Development Process
 
 #### Issue: Production Issue Resolution Time
+
 - **Positive**: Issue resolved in 18 minutes
 - **Gap**: Required deep debugging at 2 AM
 
 **Action Items**:
+
 - [ ] Create incident response playbook
 - [ ] Document common failure patterns
 - [ ] Improve error messages (map XX000 to actionable guidance)
 - [ ] Setup on-call rotation with runbooks
 
 #### Issue: Deployment Process
+
 - **Problem**: Commits deployed without staged rollout
 - **Risk**: Issues hit production immediately
 
 **Action Items**:
+
 - [ ] Implement staging environment
 - [ ] Require smoke tests before production deploy
 - [ ] Automated rollback on error threshold
@@ -493,10 +548,12 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### 7. Documentation
 
 #### Issue: Prisma Patterns Not Documented
+
 - **Gap**: No internal guide on Prisma best practices
 - **Impact**: Engineers may repeat same mistakes
 
 **Action Items**:
+
 - [x] ✅ Created `DATABASE_CONCURRENCY_CONFIG.md`
 - [ ] Create `PRISMA_PATTERNS.md`
 - [ ] Add examples of good vs bad patterns
@@ -504,10 +561,12 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 - [ ] New developer onboarding checklist
 
 #### Issue: Incident History Not Tracked
+
 - **Gap**: No central location for learning from incidents
 - **This Document**: First incident review ✅
 
 **Action Items**:
+
 - [x] ✅ Created `incident-reviews/` directory
 - [ ] Template for future incident reviews
 - [ ] Quarterly review of all incidents
@@ -548,12 +607,14 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ## Prevention Measures
 
 ### Immediate (Completed) ✅
+
 - [x] Removed unnecessary `connect` clause from upsert
 - [x] Restored parallel processing after validation
 - [x] Verified service operational
 - [x] Created comprehensive incident review
 
 ### Short Term (Next 2 Weeks)
+
 - [ ] Add integration tests for upsert operations
 - [ ] Create Prisma patterns documentation
 - [ ] Setup alerting for PostgreSQL errors
@@ -561,6 +622,7 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 - [ ] Create load testing framework
 
 ### Medium Term (Next Quarter)
+
 - [ ] Implement staging environment
 - [ ] Add query performance monitoring
 - [ ] Create deployment runbooks
@@ -568,6 +630,7 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 - [ ] Regular performance review process
 
 ### Long Term (Next 6 Months)
+
 - [ ] Consider schema simplification
 - [ ] Evaluate connection pooler alternatives
 - [ ] Build comprehensive test suite
@@ -579,6 +642,7 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ## References
 
 ### Related Files
+
 - `options/ingestor.py` - Fixed upsert implementation
 - `options/decorator.py` - Concurrency control
 - `prisma/schema.prisma` - Database schema
@@ -586,10 +650,12 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 - `.env` - Database connection string
 
 ### Commits
+
 - `145a79b` - "enhance concurrency connection" (exposed bug)
 - `4325c69` - "avoiding bursting prisma connection limits"
 
 ### External Resources
+
 - [Prisma Relations Guide](https://www.prisma.io/docs/concepts/components/prisma-schema/relations)
 - [PostgreSQL Error Codes](https://www.postgresql.org/docs/current/errcodes-appendix.html)
 - [Neon Connection Pooling](https://neon.tech/docs/connect/connection-pooling)
@@ -602,10 +668,12 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### PostgreSQL Error XX000
 
 **Definition**: Internal Error
+
 - Class: XX - Internal Error
 - Code: 000 - Unspecified
 
 **Typical Causes**:
+
 1. Query planner bugs or edge cases
 2. Optimizer choosing invalid execution plan
 3. Corrupted statistics or catalog
@@ -613,6 +681,7 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 5. Connection pooler interference with plan caching
 
 **Resolution Approaches**:
+
 1. Simplify the query (✅ what we did)
 2. Run `ANALYZE` on affected tables
 3. Disable parallel query execution
@@ -622,6 +691,7 @@ The `-pooler` in the hostname indicates you're using Neon's connection pooler.
 ### Prisma Query Generation
 
 **High-Level Flow**:
+
 ```
 Prisma Client API Call
     ↓
@@ -637,6 +707,7 @@ Results back to Prisma
 ```
 
 **Upsert Translation** (simplified):
+
 ```python
 # Prisma
 .upsert(where={...}, data={"create": {...}, "update": {...}})
