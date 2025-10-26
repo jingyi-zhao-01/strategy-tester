@@ -68,7 +68,7 @@ def migrate_expired_options_handler(event, context):
 
 
 if __name__ == "__main__":
-    Log.info("-----------Ingesting options...")
-    ingest_options_handler(None, None)
+    #     # Log.info("-----------Ingesting options...")
+    #     # ingest_options_handler(None, None)
     Log.info("-----------Ingesting option snapshots...")
     ingest_option_snapshots_handler(None, None)

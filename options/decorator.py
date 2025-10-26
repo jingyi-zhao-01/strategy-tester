@@ -11,7 +11,7 @@ from prisma import Prisma
 load_dotenv()
 
 CONCURRENCY_LIMIT = 200
-DATA_BASE_CONCURRENCY_LIMIT = 100
+DATA_BASE_CONCURRENCY_LIMIT = 10
 OPTION_BATCH_RETRIEVAL_SIZE = 500
 _db_semaphore = asyncio.Semaphore(DATA_BASE_CONCURRENCY_LIMIT)
 
@@ -52,6 +52,37 @@ def bounded_db_connection(func):
                 return await func(*args, **kwargs)
         else:
             return await func(*args, **kwargs)
+
+    return wrapper
+
+
+def bounded_db_connection_asyncgen(func):
+    """Wrap async generators with database connection and concurrency management.
+
+    Ensures:
+    1. Database connection is established once and reused
+    2. Connection pool semaphore limits concurrent database operations
+    3. Connection pool statistics are logged
+    """
+
+    async def wrapper(*args, **kwargs):
+        global _db_connected  # noqa: PLW0603
+        client = db
+        if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
+            # Only connect once, reuse the connection
+            async with _db_lock:
+                if not _db_connected:
+                    await client.connect()
+                    _db_connected = True
+                    _log_connection_pool_stats()
+            # For async generators, limit concurrency per yield
+            async for item in func(*args, **kwargs):
+                async with _db_semaphore:
+                    _log_connection_pool_stats()
+                    yield item
+        else:
+            async for item in func(*args, **kwargs):
+                yield item
 
     return wrapper
 

@@ -103,6 +103,7 @@ def configure_logging(
         enable_otel: Enable OpenTelemetry log export (default: True).
         log_format: Format string for log messages.
         date_format: Format string for dates in logs.
+        dotenv_path: Optional path to .env file to load for this ingestor.
 
     Returns:
     -------
@@ -153,9 +154,7 @@ def configure_logging(
                     max_queue_size=2048,
                     schedule_delay_millis=5000,  # Export every 5 seconds
                 )
-            )
-
-            # Add OTEL logging handler to bridge Python logging to OTEL
+            )  # Add OTEL logging handler to bridge Python logging to OTEL
             otel_handler = LoggingHandler(level=log_level, logger_provider=otel_provider)
             logger.addHandler(otel_handler)
 

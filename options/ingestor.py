@@ -184,6 +184,7 @@ class OptionIngestor:
                     },
                     data={
                         "create": {
+                            "ticker": contract_ticker,
                             "open_interest": (
                                 int(snapshot.open_interest)
                                 if snapshot.open_interest is not None
@@ -206,7 +207,6 @@ class OptionIngestor:
                             "day_change": (
                                 snapshot.day.change_percent if snapshot.day is not None else None
                             ),
-                            "option": {"connect": {"ticker": contract_ticker}},
                         },
                         "update": {
                             "open_interest": (
@@ -231,7 +231,7 @@ class OptionIngestor:
                             "day_change": (
                                 snapshot.day.change_percent if snapshot.day is not None else None
                             ),
-                            "option": {"connect": {"ticker": contract_ticker}},
+                            # "option": {"connect": {"ticker": contract_ticker}},
                         },
                     },
                 )

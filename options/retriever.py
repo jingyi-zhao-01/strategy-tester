@@ -8,6 +8,7 @@ from options.decorator import (
     CONCURRENCY_LIMIT,
     OPTION_BATCH_RETRIEVAL_SIZE,
     bounded_db_connection,
+    bounded_db_connection_asyncgen,
     traced_span_asyncgen,
 )
 
@@ -43,9 +44,8 @@ class OptionRetriever:
             Log.error(f"Error fetching option contracts: {e}")
             return []
 
-    # #TODO: bound iterator with db
-    # @bounded_db
     @traced_span_asyncgen(name="stream_retrieve_active", attributes={"module": "NEON"})
+    @bounded_db_connection_asyncgen
     async def stream_retrieve_active(
         self, *args, **kwargs
     ) -> AsyncGenerator[list["Options"], None]:

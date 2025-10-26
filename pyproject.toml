@@ -72,7 +72,8 @@ pytest-asyncio = "1.1.0"
 ruff = "^0.12.8"
 
 [tool.poetry.scripts]
-update_options = "cli.run:main"
+ingest_options = "cli.ingest_options:main"
+ingest_snapshots = "cli.ingest_snapshots:main"
 
 [tool.coverage.run]
 relative_files = true

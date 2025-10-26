@@ -47,7 +47,7 @@ model OptionSnapshot {
   option        Options  @relation(fields: [ticker], references: [ticker])
 
   @@id([ticker, last_updated])
-  @@unique([ticker, last_updated])
+  @@unique([ticker, last_updated], name: "ticker_last_updated")
   @@index([last_updated(sort: Desc)])
   @@map("option_snapshots")
 }

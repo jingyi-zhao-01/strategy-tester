@@ -1,0 +1,30 @@
+[Unit]
+Description=Ingest Option Snapshots (Market Data) for Active Contracts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jingyi/PycharmProjects/strategy-tester
+
+Environment="PATH=/home/jingyi/.local/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Load service-specific .env with ingest-snapshots OTEL attributes
+EnvironmentFile=/home/jingyi/PycharmProjects/strategy-tester/.env.snapshots
+
+# Increase file descriptor limit for Prisma connection pool
+LimitNOFILE=65536
+
+# Run the ingest_snapshots zsh script
+ExecStart=/home/jingyi/PycharmProjects/strategy-tester/scripts/ingest_snapshots.zsh
+
+# Consider timeout (exit code 124) as success
+SuccessExitStatus=124
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ingest_snapshots
+
+[Install]
+WantedBy=default.target
