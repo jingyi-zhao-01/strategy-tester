@@ -33,22 +33,27 @@ semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 # Avoid importing/initializing Prisma at import time to prevent errors when the client
 # hasn't been generated or when DB is unavailable.
 db = Prisma(auto_register=True)
+_db_connected = False
+_db_lock = asyncio.Lock()
 
 
 def bounded_db_connection(func):
     async def wrapper(*args, **kwargs):
+        global _db_connected  # noqa: PLW0603
         client = db
         if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
-            try:
-                # Log.debug("Prisma connect() sees DATABASE_URL = %s", os.getenv("DATABASE_URL"))
-                await client.connect()
-            except Exception:
-                # Log.debug("Prisma connect() failed: %s", e)
-                raise
-            try:
-                return await func(*args, **kwargs)
-            finally:
-                await client.disconnect()
+            # Only connect once, reuse the connection
+            async with _db_lock:
+                if not _db_connected:
+                    try:
+                        # Log.debug("Prisma connect() sees DATABASE_URL = %s",
+                        #  os.getenv("DATABASE_URL"))
+                        await client.connect()
+                        _db_connected = True
+                    except Exception:
+                        # Log.debug("Prisma connect() failed: %s", e)
+                        raise
+            return await func(*args, **kwargs)
         else:
             return await func(*args, **kwargs)
 

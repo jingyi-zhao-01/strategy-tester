@@ -130,6 +130,13 @@ def configure_logging(
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
+        # Add file handler to root logger
+    root_logger = logging.getLogger()
+    file_handler = logging.FileHandler("/home/jingyi/PycharmProjects/strategy-tester/app.log")
+    file_formatter = logging.Formatter(log_format, datefmt=date_format)
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
+
     otel_provider = None
     otel_handler: LoggingHandler | None = None
 

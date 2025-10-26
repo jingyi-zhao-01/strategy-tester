@@ -1,0 +1,14 @@
+[Unit]
+Description=Test network access for systemctl --user
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/jingyi/PycharmProjects/strategy-tester
+
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+
+ExecStart=/home/jingyi/PycharmProjects/strategy-tester/scripts/test_network.zsh
+
+[Install]
+WantedBy=default.target
+

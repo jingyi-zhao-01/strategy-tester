@@ -27,7 +27,7 @@ fi
 
 # Run job with timeout to avoid hangs
 
-timeout 40 poetry run update_options
+timeout 120 poetry run update_options
 exit_code=$?
 
 # Report result
