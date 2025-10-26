@@ -9,6 +9,11 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // CONNECTION LIMIT CONFIGURATION:
+  // Add ?connection_limit=N to your DATABASE_URL to limit the number of concurrent connections.
+  // Example: postgresql://user:pass@host:port/dbname?connection_limit=100
+  // This value should match DATA_BASE_CONCURRENCY_LIMIT in options/decorator.py
+  // The connection_limit parameter in the URL string limits Prisma's internal connection pool.
   url      = env("DATABASE_URL")
 }
 

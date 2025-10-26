@@ -193,3 +193,29 @@ class Log:
         logger = _LoggerState.get_logger()
         if logger is not None:
             logger.error(msg, *args, stacklevel=2, **kwargs)
+
+    @staticmethod
+    def debug(msg: str, *args, **kwargs) -> None:
+        """Log debug level message."""
+        logger = _LoggerState.get_logger()
+        if logger is not None:
+            logger.debug(msg, *args, stacklevel=2, **kwargs)
+
+    @staticmethod
+    def log_db_connection_pool_stats(
+        active_conns: int | str,
+        min_size: int | str,
+        max_size: int | str,
+    ) -> None:
+        """Log database connection pool statistics.
+
+        Args:
+        ----
+            active_conns: Number of active connections.
+            min_size: Minimum pool size.
+            max_size: Maximum pool size.
+
+        """
+        Log.info(
+            f"Database pool stats - Active: {active_conns}, " f"Min: {min_size}, Max: {max_size}"
+        )

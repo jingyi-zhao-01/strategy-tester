@@ -5,33 +5,22 @@ from dotenv import load_dotenv
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 
+from lib.observability.log import Log
 from prisma import Prisma
 
 load_dotenv()
 
-
-# TODO: Open Interest vs expiration date vs strike price
-
 CONCURRENCY_LIMIT = 200
-DATA_BASE_CONCURRENCY_LIMIT = 700
+DATA_BASE_CONCURRENCY_LIMIT = 100
 OPTION_BATCH_RETRIEVAL_SIZE = 500
-
-
-# Initialize OpenTelemetry providers
-# resource = Resource.create({"service.name": "polygon"})
-# tp = TracerProvider(resource=resource)
-# tp.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
-# trace.set_tracer_provider(tp)
-
+_db_semaphore = asyncio.Semaphore(DATA_BASE_CONCURRENCY_LIMIT)
 
 # SystemMetricsInstrumentor().instrument()
 # tracer = trace.get_tracer("polygon")
 tracer = trace.get_tracer(__name__)
 
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
-# TODO: Lazy DB client; will be provided via monkeypatch in tests or resolved at runtime.
-# Avoid importing/initializing Prisma at import time to prevent errors when the client
-# hasn't been generated or when DB is unavailable.
+
 db = Prisma(auto_register=True)
 _db_connected = False
 _db_lock = asyncio.Lock()
@@ -50,14 +39,39 @@ def bounded_db_connection(func):
                         #  os.getenv("DATABASE_URL"))
                         await client.connect()
                         _db_connected = True
+                        # Log pool info after connection
+                        _log_connection_pool_stats()
                     except Exception:
                         # Log.debug("Prisma connect() failed: %s", e)
                         raise
-            return await func(*args, **kwargs)
+            # Limit concurrent DB operations to the connection pool size
+            # This prevents overwhelming the database connection pool
+            async with _db_semaphore:
+                # Log connection stats before each operation
+                _log_connection_pool_stats()
+                return await func(*args, **kwargs)
         else:
             return await func(*args, **kwargs)
 
     return wrapper
+
+
+def _log_connection_pool_stats():
+    """Extract and log database connection pool statistics."""
+    try:
+        # Access the underlying asyncpg pool from Prisma's engine
+        # Using type ignore for private attribute access
+        engine = getattr(db, "_engine", None)  # type: ignore[attr-defined]
+        if engine and hasattr(engine, "_pool"):
+            pool = engine._pool
+            if pool:
+                # Try to get active connections count
+                active_conns = len(pool._holders) if hasattr(pool, "_holders") else "unknown"
+                min_size = pool._minsize if hasattr(pool, "_minsize") else "unknown"
+                max_size = pool._maxsize if hasattr(pool, "_maxsize") else "unknown"
+                Log.log_db_connection_pool_stats(active_conns, min_size, max_size)
+    except Exception as e:
+        Log.debug(f"Could not retrieve connection pool stats: {e}")
 
 
 def bounded_async_sem(limit=CONCURRENCY_LIMIT):
