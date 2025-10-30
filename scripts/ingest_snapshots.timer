@@ -3,13 +3,14 @@ Description=Timer for option snapshots ingestion
 Requires=ingest_snapshots.service
 
 [Timer]
-# Run daily at 23:30 PST (11:30 PM Pacific Time)
-# Note: systemd uses UTC, PST is UTC-8, so 23:30 PST = 07:30 UTC next day
-OnCalendar=daily
-OnCalendar=*-*-* 07:30:00
-Persistent=true
+# Run at 23:30 (11:30 PM) America/Los_Angeles
+# on the 1st, 3rd, 5th, and 7th day of each month
+OnCalendar=*-*-* 23:30:00
 
-# Also allow manual triggering
+# interpret the above in Los Angeles local time
+Timezone=America/Los_Angeles
+
+Persistent=true
 AccuracySec=1s
 
 [Install]
