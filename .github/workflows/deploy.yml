@@ -1,0 +1,77 @@
+# This is a GitHub Actions workflow to build and deploy the SAM application.
+
+name: Deploy SAM Application
+
+on:
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+
+permissions:
+  id-token: write   # This is required for authenticating with AWS using OIDC
+  contents: read    # This is required for actions/checkout
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Define the configurations to deploy. Corresponds to [ingest_options] and [ingest_snapshots] in samconfig.toml
+        config: [ "ingest_options", "ingest_snapshots" ]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # You must configure an OIDC provider in your AWS account and create a role for GitHub Actions.
+          # See: https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/GitHubAction-DeploySAM # <-- IMPORTANT: Replace with your IAM Role ARN
+          aws-region: us-west-1 # Or your desired region
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+
+      - name: Add Poetry to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install project dependencies
+        run: poetry install --no-root
+
+      - name: Create .env files from secrets
+        run: |
+          echo "${{ secrets.DOTENV_OPTIONS }}" > .env.options
+          echo "${{ secrets.DOTENV_SNAPSHOTS }}" > .env.snapshots
+        # IMPORTANT: You must create two repository secrets in your GitHub project:
+        # 1. DOTENV_OPTIONS: Copy the full content of your local .env.options file into this secret.
+        # 2. DOTENV_SNAPSHOTS: Copy the full content of your local .env.snapshots file into this secret.
+
+      - name: Prepare SAM environment JSON files
+        run: |
+          poetry run python scripts/prepare-sam-env.py .env.options env.options.json
+          poetry run python scripts/prepare-sam-env.py .env.snapshots env.snapshots.json
+
+      - name: SAM Build
+        # The --use-container flag is essential for building native dependencies correctly for the Lambda environment.
+        run: poetry run sam build --use-container --config-env ${{ matrix.config }}
+
+      - name: SAM Deploy
+        run: |
+          # Get the stack name from samconfig.toml for the current configuration
+          STACK_NAME=$(poetry run toml get samconfig.toml ${{ matrix.config }}.stack_name | tr -d '"')
+          S3_BUCKET=$(poetry run toml get samconfig.toml ${{ matrix.config }}.s3_bucket | tr -d '"')
+          REGION=$(poetry run toml get samconfig.toml ${{ matrix.config }}.region | tr-d '"')
+
+          poetry run sam deploy \
+            --stack-name $STACK_NAME \
+            --s3-bucket $S3_BUCKET \
+            --region $REGION \
+            --config-env ${{ matrix.config }} \
+            --no-confirm-changeset \
+            --capabilities CAPABILITY_IAM
