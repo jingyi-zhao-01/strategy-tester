@@ -34,15 +34,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-
-      - name: Add Poetry to PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
       - name: Install project dependencies
-        run: poetry install --no-root
+        run: uv sync --python 3.12 --all-extras
 
       - name: Create .env files from secrets
         run: |
@@ -54,21 +50,21 @@ jobs:
 
       - name: Prepare SAM environment JSON files
         run: |
-          poetry run python scripts/prepare-sam-env.py .env.options env.options.json
-          poetry run python scripts/prepare-sam-env.py .env.snapshots env.snapshots.json
+          uv run python scripts/prepare-sam-env.py .env.options env.options.json
+          uv run python scripts/prepare-sam-env.py .env.snapshots env.snapshots.json
 
       - name: SAM Build
         # The --use-container flag is essential for building native dependencies correctly for the Lambda environment.
-        run: poetry run sam build --use-container --config-env ${{ matrix.config }}
+        run: uv run sam build --use-container --config-env ${{ matrix.config }}
 
       - name: SAM Deploy
         run: |
           # Get the stack name from samconfig.toml for the current configuration
-          STACK_NAME=$(poetry run toml get samconfig.toml ${{ matrix.config }}.stack_name | tr -d '"')
-          S3_BUCKET=$(poetry run toml get samconfig.toml ${{ matrix.config }}.s3_bucket | tr -d '"')
-          REGION=$(poetry run toml get samconfig.toml ${{ matrix.config }}.region | tr-d '"')
+          STACK_NAME=$(uv run toml get samconfig.toml ${{ matrix.config }}.stack_name | tr -d '"')
+          S3_BUCKET=$(uv run toml get samconfig.toml ${{ matrix.config }}.s3_bucket | tr -d '"')
+          REGION=$(uv run toml get samconfig.toml ${{ matrix.config }}.region | tr-d '"')
 
-          poetry run sam deploy \
+          uv run sam deploy \
             --stack-name $STACK_NAME \
             --s3-bucket $S3_BUCKET \
             --region $REGION \

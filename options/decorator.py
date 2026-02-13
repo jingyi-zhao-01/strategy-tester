@@ -31,6 +31,7 @@ def bounded_db_connection(func):
         global _db_connected  # noqa: PLW0603
         client = db
         if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
+            did_connect = False
             # Only connect once, reuse the connection
             async with _db_lock:
                 if not _db_connected:
@@ -39,6 +40,7 @@ def bounded_db_connection(func):
                         #  os.getenv("DATABASE_URL"))
                         await client.connect()
                         _db_connected = True
+                        did_connect = True
                         # Log pool info after connection
                         _log_connection_pool_stats()
                     except Exception:
@@ -46,10 +48,15 @@ def bounded_db_connection(func):
                         raise
             # Limit concurrent DB operations to the connection pool size
             # This prevents overwhelming the database connection pool
-            async with _db_semaphore:
-                # Log connection stats before each operation
-                _log_connection_pool_stats()
-                return await func(*args, **kwargs)
+            try:
+                async with _db_semaphore:
+                    # Log connection stats before each operation
+                    _log_connection_pool_stats()
+                    return await func(*args, **kwargs)
+            finally:
+                if did_connect:
+                    await client.disconnect()
+                    _db_connected = False
         else:
             return await func(*args, **kwargs)
 
@@ -69,17 +76,24 @@ def bounded_db_connection_asyncgen(func):
         global _db_connected  # noqa: PLW0603
         client = db
         if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
+            did_connect = False
             # Only connect once, reuse the connection
             async with _db_lock:
                 if not _db_connected:
                     await client.connect()
                     _db_connected = True
+                    did_connect = True
                     _log_connection_pool_stats()
-            # For async generators, limit concurrency per yield
-            async for item in func(*args, **kwargs):
-                async with _db_semaphore:
-                    _log_connection_pool_stats()
-                    yield item
+            try:
+                # For async generators, limit concurrency per yield
+                async for item in func(*args, **kwargs):
+                    async with _db_semaphore:
+                        _log_connection_pool_stats()
+                        yield item
+            finally:
+                if did_connect:
+                    await client.disconnect()
+                    _db_connected = False
         else:
             async for item in func(*args, **kwargs):
                 yield item

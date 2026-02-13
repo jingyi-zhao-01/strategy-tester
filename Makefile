@@ -2,7 +2,7 @@
 
 # Define common build steps for all functions
 define build_steps
-	poetry export -f requirements.txt --without-hashes | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
+	uv pip freeze --python 3.12 | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
 	pip install -r $(ARTIFACTS_DIR)/requirements.txt -t $(ARTIFACTS_DIR)
 	cp -r cli/ $(ARTIFACTS_DIR)/
 	cp -r lib/ $(ARTIFACTS_DIR)/
@@ -22,7 +22,7 @@ build-PingFunction:
 
 
 build-PingFunction:
-	poetry export -f requirements.txt --without-hashes | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
+	uv pip freeze --python 3.12 | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
 	pip install -r $(ARTIFACTS_DIR)/requirements.txt -t $(ARTIFACTS_DIR)
 	cp -r cli/ $(ARTIFACTS_DIR)/
 	cp -r lib/ $(ARTIFACTS_DIR)/
@@ -31,16 +31,7 @@ build-PingFunction:
 	cp -r typings/ $(ARTIFACTS_DIR)/
 
 build-IngestSnapshotsFunction:
-	poetry export -f requirements.txt --without-hashes | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
-	pip install -r $(ARTIFACTS_DIR)/requirements.txt -t $(ARTIFACTS_DIR)
-	cp -r cli/ $(ARTIFACTS_DIR)/
-	cp -r lib/ $(ARTIFACTS_DIR)/
-	cp -r options/ $(ARTIFACTS_DIR)/
-	cp -r prisma/ $(ARTIFACTS_DIR)/
-	cp -r typings/ $(ARTIFACTS_DIR)/
-
-build-PingFunction:
-	poetry export -f requirements.txt --without-hashes | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
+	uv pip freeze --python 3.12 | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
 	pip install -r $(ARTIFACTS_DIR)/requirements.txt -t $(ARTIFACTS_DIR)
 	cp -r cli/ $(ARTIFACTS_DIR)/
 	cp -r lib/ $(ARTIFACTS_DIR)/

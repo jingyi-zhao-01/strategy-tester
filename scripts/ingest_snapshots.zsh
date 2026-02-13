@@ -11,7 +11,7 @@ export DISPLAY=:0
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
 
-# cd to project root so poetry sees pyproject.toml
+# cd to project root so uv sees pyproject.toml
 cd /home/jingyi/PycharmProjects/strategy-tester || exit 1
 
 # Send a desktop notification before starting (best-effort)
@@ -22,7 +22,7 @@ fi
 # Run job with timeout (30 minutes = 1800 seconds)
 echo "Starting option snapshots ingestion at $(date '+%Y-%m-%d %H:%M:%S')"
 
-poetry run ingest_snapshots
+uv run ingest_snapshots
 exit_code=$?
 
 # Report result based on exit code

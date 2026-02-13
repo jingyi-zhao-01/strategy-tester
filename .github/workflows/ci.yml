@@ -23,17 +23,18 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies with Poetry
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies with uv
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install poetry
-          poetry install --no-interaction
+          uv sync --python 3.12 --all-extras
 
       - name: Generate Prisma client
         run: |
-          # Try running prisma from the poetry environment first, fall back to npx if available
-          if poetry run which prisma >/dev/null 2>&1; then
-            poetry run prisma generate
+          # Try running prisma from the uv environment first, fall back to npx if available
+          if uv run which prisma >/dev/null 2>&1; then
+            uv run prisma generate
           elif which npx >/dev/null 2>&1; then
             npx prisma generate --schema=prisma/schema.prisma
           else
@@ -43,7 +44,7 @@ jobs:
 
       - name: Run tests and generate coverage.xml
         run: |
-          poetry run pytest --cov=./ --cov-report=xml:coverage.xml -q
+          uv run pytest --cov=./ --cov-report=xml:coverage.xml -q
 
       - name: Upload coverage as artifact (optional)
         uses: actions/upload-artifact@v4

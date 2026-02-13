@@ -19,13 +19,13 @@ File structure (high level)
 - pyproject.toml, pytest.ini, conftest.py: project config and test helpers
 
 How to set up and run
-- Requirements: Python 3.12, Poetry, PostgreSQL. Environment variables in .env:
+- Requirements: Python 3.12, uv, PostgreSQL. Environment variables in .env:
   - POLYGON_API_KEY=... (required for real API calls)
   - DATABASE_URL=postgresql://user:pass@host:port/dbname
-- Install deps: `poetry install` (dev: pytest, ruff, pytest-asyncio are included)
-- Generate Prisma client (if schema changed): `poetry run prisma generate` and ensure DB reachable
-- Run tests: `poetry run pytest -q` (conftest provides stubs to avoid hitting real Prisma/models; tests don’t require live API by default)
-- Lint: `poetry run ruff check .` and format via black rules (line-length=100)
+- Install deps: `uv sync` (dev: pytest, ruff, pytest-asyncio are included)
+- Generate Prisma client (if schema changed): `uv run prisma generate` and ensure DB reachable
+- Run tests: `uv run pytest -q` (conftest provides stubs to avoid hitting real Prisma/models; tests don’t require live API by default)
+- Lint: `uv run ruff check .` and format via black rules (line-length=100)
 
 Common workflows
 - Ingest options (contracts): call ingest_options_handler from cli/lambda_handler.py or run via opentelemetry-instrumented `cli/run.py` which invokes lambda_handler
