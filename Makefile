@@ -2,7 +2,7 @@
 
 # Install dependencies using uv
 setup:
-	uv sync --python $$(which python) --extra dev --all-extras
+	uv sync --python $(which python) --extra dev
 
 # Run tests and generate coverage.xml
 test:
