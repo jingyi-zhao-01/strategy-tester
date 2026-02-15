@@ -1,6 +1,7 @@
 import atexit
 import contextlib
 import logging
+import os
 
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
 from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
@@ -131,9 +132,12 @@ def configure_logging(
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 
-        # Add file handler to root logger
+        # Add file handler to root logger (use configurable path or default to ./app.log)
     root_logger = logging.getLogger()
-    file_handler = logging.FileHandler("/home/jingyi/PycharmProjects/strategy-tester/app.log")
+    log_dir = os.environ.get("LOG_DIR", ".")
+    log_file = os.path.join(log_dir, "app.log")
+    os.makedirs(log_dir, exist_ok=True)
+    file_handler = logging.FileHandler(log_file)
     file_formatter = logging.Formatter(log_format, datefmt=date_format)
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
