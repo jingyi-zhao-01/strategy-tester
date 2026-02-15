@@ -25,6 +25,15 @@ jobs:
           which python
           python --version
 
+      - name: Debug python resolution
+        run: |
+          id
+          echo "PATH=$PATH"
+          which python || true
+          python --version || true
+          which pyenv || true
+          pyenv --version || true
+
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
