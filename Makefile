@@ -1,4 +1,12 @@
-.PHONY: build-IngestOptionsFunction build-IngestSnapshotsFunction build-PingFunction
+.PHONY: build-IngestOptionsFunction build-IngestSnapshotsFunction build-PingFunction setup test
+
+# Install dependencies using uv
+setup:
+	uv sync --python $$(which python) --extra dev --all-extras
+
+# Run tests and generate coverage.xml
+test:
+	uv run python -m pytest --cov=./ --cov-report=xml:coverage.xml -q
 
 # Define common build steps for all functions
 define build_steps

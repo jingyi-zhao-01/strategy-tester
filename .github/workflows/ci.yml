@@ -49,7 +49,7 @@ jobs:
 
       - name: Install dependencies with uv
         run: |
-          uv sync --python /usr/bin/python --all-extras
+          make setup
 
       - name: Generate Prisma client
         run: |
@@ -64,7 +64,7 @@ jobs:
 
       - name: Run tests and generate coverage.xml
         run: |
-          uv run pytest --cov=./ --cov-report=xml:coverage.xml -q
+          make test
 
       - name: Upload coverage as artifact (optional)
         uses: actions/upload-artifact@v4
@@ -73,27 +73,27 @@ jobs:
           path: coverage.xml
 
 
-  # sonar:
-  #   needs: tests
-  #   runs-on: self-hosted
+  sonar:
+    needs: tests
+    runs-on: self-hosted
 
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-  #     - name: Get coverage.xml from previous job
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: coverage-xml
-  #         path: ./
+      - name: Get coverage.xml from previous job
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-xml
+          path: ./
 
-  #     - name: Analyze with SonarCloud
-  #       uses: SonarSource/sonarcloud-github-action@master
-  #       env:
-  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  #       with:
-  #         args: >-
-  #           -Dsonar.projectKey=jingyi-zhao-01_strategy-tester
-  #           -Dsonar.organization=jzhao62
-  #           -Dsonar.python.coverage.reportPaths=coverage.xml
-  #         projectBaseDir: .
+      - name: Analyze with SonarCloud
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >-
+            -Dsonar.projectKey=jingyi-zhao-01_strategy-tester
+            -Dsonar.organization=jzhao62
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+          projectBaseDir: .
