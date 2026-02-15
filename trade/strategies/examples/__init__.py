@@ -1,0 +1,2 @@
+
+"""Example strategy implementations."""

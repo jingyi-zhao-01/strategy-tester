@@ -5,8 +5,8 @@ import pytz
 from dotenv import load_dotenv
 from polygon import RESTClient
 
-from options.models import OptionContractSnapshot
-from options.models.option_models import OptionSymbol
+from ingestor.models import OptionContractSnapshot
+from ingestor.models.option_models import OptionSymbol
 
 # Load environment variables from .env file (only in local development)
 if not os.getenv("AWS_LAMBDA_FUNCTION_NAME"):

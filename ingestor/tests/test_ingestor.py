@@ -2,9 +2,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from options.errors import OptionTickerNeverActiveError
-from options.ingestor import OptionIngestor, OptionSnapshotsIngestor
-from options.models import OptionIngestParams, OptionsContract
+from ingestor.errors import OptionTickerNeverActiveError
+from ingestor import OptionIngestor, OptionSnapshotsIngestor
+from ingestor.models import OptionIngestParams, OptionsContract
 
 
 @pytest.fixture
@@ -33,11 +33,11 @@ def snapshots_ingestor(mock_option_retriever):
 @pytest.mark.asyncio
 async def test_ingest_options_empty(monkeypatch, ingestor):
     monkeypatch.setattr(
-        "options.api.options.Fetcher",
+        "ingestor.api.options.Fetcher",
         lambda asset: MagicMock(get_call_contracts=lambda: [], get_put_contracts=lambda: []),
     )
     monkeypatch.setattr(
-        "options.api.options.get_contract_within_price_range", lambda contracts, price, year: []
+        "ingestor.api.options.get_contract_within_price_range", lambda contracts, price, year: []
     )
     await ingestor.ingest_options([OptionIngestParams("TEST", (0, 1), (2025, 2025))])
 

@@ -7,20 +7,20 @@ import traceback
 from importlib import import_module
 
 from lib.observability import Log
-from options.util import (
+from ingestor.util import (
     get_current_datetime,
     option_expiration_date_to_datetime,
 )
 from prisma.models import Options
 
-from ..decorator import (
+from ingestor.decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
     bounded_async_sem,
     bounded_db_connection,
     traced_span_async,
 )
-from ..models import OptionIngestParams, OptionsContract
-from ..retriever import OptionRetriever
+from ingestor.models import OptionIngestParams, OptionsContract
+from ingestor.retriever import OptionRetriever
 
 
 class OptionIngestor:
@@ -40,7 +40,7 @@ class OptionIngestor:
         """Ingest option contracts from the API and store them in the database."""
         for target in underlying_assets:
             underlying_asset = target.underlying_asset
-            fetcher = import_module("options.api.options").Fetcher  # type: ignore
+            fetcher = import_module("ingestor.api.options").Fetcher  # type: ignore
             core = fetcher(underlying_asset)
             calls = core.get_call_contracts()
             puts = core.get_put_contracts()

@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from options.retriever import OptionRetriever
+from ingestor.retriever import OptionRetriever
 
 
 @pytest.fixture

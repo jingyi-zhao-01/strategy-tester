@@ -4,7 +4,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 from lib.observability import Log
-from options.decorator import (
+from ingestor.decorator import (
     CONCURRENCY_LIMIT,
     OPTION_BATCH_RETRIEVAL_SIZE,
     bounded_db_connection,

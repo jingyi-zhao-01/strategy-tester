@@ -4,8 +4,8 @@
 import asyncio
 
 from lib.observability import Log
-from options.api.options import Fetcher
-from options.decorator import traced_span_async
+from ingestor.api.options import Fetcher
+from ingestor.decorator import traced_span_async
 
 
 @traced_span_async(name="test_polygon", attributes={"testcase": "decorator"})
