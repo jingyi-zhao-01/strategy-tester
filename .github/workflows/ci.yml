@@ -19,25 +19,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.READ_PRIVATE_TOKEN }}
-          
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.14'
-          # for arch linux server
-          architecture: 'x64-freethreaded'
 
+      - name: Show runner Python (debug)
+        run: |
+          which python
+          python --version
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
       - name: Install dependencies with uv
         run: |
-          uv sync --python 3.14 --all-extras
+          uv sync --python /usr/bin/python --all-extras
 
       - name: Generate Prisma client
         run: |
-          # Try running prisma from the uv environment first, fall back to npx if available
           if uv run which prisma >/dev/null 2>&1; then
             uv run prisma generate
           elif which npx >/dev/null 2>&1; then
@@ -56,6 +52,7 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+
 
   # sonar:
   #   needs: tests
