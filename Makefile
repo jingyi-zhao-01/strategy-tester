@@ -1,9 +1,12 @@
 .PHONY: build-IngestOptionsFunction build-IngestSnapshotsFunction build-PingFunction setup test
 
+
+PYTHON := $(shell command -v python)
+
+
 # Install dependencies using uv
 setup:
-	uv sync --python $(which python) --extra dev
-
+	uv sync --python $(PYTHON) --extra dev
 # Run tests and generate coverage.xml
 test:
 	uv run python -m pytest --cov=./ --cov-report=xml:coverage.xml -q
