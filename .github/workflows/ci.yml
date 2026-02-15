@@ -20,10 +20,17 @@ jobs:
         with:
           token: ${{ secrets.READ_PRIVATE_TOKEN }}
 
-      - name: Show runner Python (debug)
+
+
+      - name: Select Python 3.12 via pyenv
+        shell: bash
         run: |
-          which python
+          export PYENV_ROOT="$HOME/.pyenv"
+          export PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
+          pyenv install -s 3.12.12
+          pyenv shell 3.12.12
           python --version
+          which python
 
       - name: Debug python resolution
         run: |
