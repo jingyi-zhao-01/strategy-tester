@@ -1,4 +1,4 @@
-.PHONY: build-IngestOptionsFunction build-IngestSnapshotsFunction build-PingFunction setup test
+.PHONY: build-IngestOptionsFunction build-IngestSnapshotsFunction build-PingFunction setup test generate
 
 
 PYTHON := $(shell command -v python)
@@ -7,6 +7,11 @@ PYTHON := $(shell command -v python)
 # Install dependencies using uv
 setup:
 	uv sync --python $(PYTHON) --extra dev
+
+# Generate Prisma client
+generate:
+	uv run prisma generate
+
 # Run tests and generate coverage.xml
 test: setup
 	uv run python -m pytest --cov=./ --cov-report=xml:coverage.xml -q

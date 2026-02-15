@@ -57,15 +57,7 @@ jobs:
           make setup
 
       - name: Generate Prisma client
-        run: |
-          if uv run which prisma >/dev/null 2>&1; then
-            uv run prisma generate
-          elif which npx >/dev/null 2>&1; then
-            npx prisma generate --schema=prisma/schema.prisma
-          else
-            echo "Prisma CLI not found in environment and npx not available" >&2
-            exit 1
-          fi
+        run: make generate
 
       - name: Run tests and generate coverage.xml
         run: |
