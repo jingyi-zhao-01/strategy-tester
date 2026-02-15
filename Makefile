@@ -8,7 +8,7 @@ PYTHON := $(shell command -v python)
 setup:
 	uv sync --python $(PYTHON) --extra dev
 # Run tests and generate coverage.xml
-test:
+test: setup
 	uv run python -m pytest --cov=./ --cov-report=xml:coverage.xml -q
 
 # Define common build steps for all functions
