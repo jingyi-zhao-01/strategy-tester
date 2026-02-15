@@ -12,9 +12,9 @@ _ENV_PATH = _PROJECT_ROOT / ".env.snapshots"
 load_dotenv(dotenv_path=_ENV_PATH)
 
 # noinspection PyUnresolvedReference
+from ingestor import OptionSnapshotsIngestor  # noqa: E402
+from ingestor.retriever import OptionRetriever  # noqa: E402
 from lib.observability import Log, configure_logging  # noqa: E402
-from options.ingestor import OptionSnapshotsIngestor  # noqa: E402
-from options.retriever import OptionRetriever  # noqa: E402
 
 # Configure logging with OTEL enabled
 configure_logging(

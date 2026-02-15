@@ -1,12 +1,12 @@
 import asyncio
 import contextlib
+from importlib import import_module
 
 from dotenv import load_dotenv
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 
 from lib.observability.log import Log
-from prisma import Prisma
 
 load_dotenv()
 
@@ -21,6 +21,10 @@ tracer = trace.get_tracer(__name__)
 
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
+# Use import_module to avoid hard dependency on Prisma at import time
+# This allows tests to mock the prisma module
+_prisma_module = import_module("prisma")
+Prisma = _prisma_module.Prisma
 db = Prisma(auto_register=True)
 _db_connected = False
 _db_lock = asyncio.Lock()

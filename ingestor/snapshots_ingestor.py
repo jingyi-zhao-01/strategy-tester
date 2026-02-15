@@ -4,8 +4,8 @@ import asyncio
 import traceback
 
 from lib.observability import Log
-from options.errors import OptionTickerNeverActiveError
-from options.util import (
+from ingestor.errors import OptionTickerNeverActiveError
+from ingestor.util import (
     format_snapshot,
     ns_to_datetime,
 )
@@ -13,15 +13,15 @@ from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from prisma.models import OptionSnapshot
 
-from ..api.options import fetch_snapshots_batch
-from ..decorator import (
+from ingestor.api.options import fetch_snapshots_batch
+from ingestor.decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
     bounded_async_sem,
     bounded_db_connection,
     traced_span_async,
 )
-from ..models import OptionContractSnapshot
-from .option_contract_ingestor import OptionIngestor
+from ingestor.models import OptionContractSnapshot
+from ingestor.option_ingestor import OptionIngestor
 
 
 class OptionSnapshotsIngestor(OptionIngestor):

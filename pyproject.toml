@@ -41,7 +41,19 @@ ingest_snapshots = "cli.ingest_snapshots:main"
 
 
 [tool.hatch.build.targets.wheel]
-packages = ["options", "lib"]
+packages = ["ingestor", "trade", "lib"]
+
+[tool.hatch.dotenv]
+path = ".env"
+
+[tool.hatch.envs.default]
+dotenv = [".env.development"]
+
+[tool.hatch.envs.staging]
+dotenv = [".env.staging"]
+
+[tool.hatch.envs.production]
+dotenv = [".env.production"]
 
 
 [tool.black]
@@ -61,7 +73,7 @@ ignore = ["D100", "D101", "D102", "D103", "D107", "D203", "D213"]
 typeCheckingMode = "basic"
 pythonVersion = "3.12"
 include = ["."]
-exclude = ["__pycache__", "build", "dist", "options/tests"]
+exclude = ["__pycache__", "build", "dist", "ingestor/tests"]
 extraPaths = ["typings"]
 stubPath = "typings"
 reportMissingModuleSource = "none"
@@ -69,5 +81,5 @@ reportMissingModuleSource = "none"
 
 [tool.coverage.run]
 relative_files = true
-source = ["options", "lib"]
+source = ["ingestor", "lib"]
 branch = true

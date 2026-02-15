@@ -13,10 +13,10 @@ load_dotenv(dotenv_path=_ENV_PATH)
 
 # noinspection PyUnresolvedReference
 from cli.targets import TARGETS  # noqa: E402
+from ingestor import OptionIngestor  # noqa: E402
+from ingestor.models import OptionIngestParams  # noqa: E402
+from ingestor.retriever import OptionRetriever  # noqa: E402
 from lib.observability import Log, configure_logging  # noqa: E402
-from options.ingestor import OptionIngestor  # noqa: E402
-from options.models import OptionIngestParams  # noqa: E402
-from options.retriever import OptionRetriever  # noqa: E402
 
 # Configure logging with OTEL enabled
 configure_logging(

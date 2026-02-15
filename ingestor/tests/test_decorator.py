@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from options import decorator
-from options.decorator import bounded_async_sem, bounded_db_connection
+from ingestor import decorator
+from ingestor.decorator import bounded_async_sem, bounded_db_connection
 
 
 class _MockPrisma:
@@ -33,7 +33,7 @@ async def test_bounded_db_connection_and_semaphore(monkeypatch):
             close_calls.append(1)
 
     # Patch db in the decorator's closure
-    monkeypatch.setattr("options.decorator.db", MockPrisma())
+    monkeypatch.setattr("ingestor.decorator.db", MockPrisma())
 
     @bounded_async_sem(limit=2)
     async def coroutine_task(i, delay=0.1):

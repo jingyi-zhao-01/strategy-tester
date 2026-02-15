@@ -1,0 +1,2 @@
+
+"""Trade automation package."""

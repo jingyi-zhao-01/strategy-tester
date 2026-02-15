@@ -1,4 +1,4 @@
-# Ensure repository root is on sys.path so 'options' and 'lib' packages are importable
+# Ensure repository root is on sys.path so 'ingestor', 'trade', and 'lib' packages are importable
 import os
 import sys
 import types
@@ -10,7 +10,38 @@ if ROOT not in sys.path:
 # Provide a dummy POLYGON_API_KEY to avoid env-related failures in tests
 os.environ.setdefault("POLYGON_API_KEY", "test-key")
 
-# Stub prisma.models so tests can patch attributes without requiring generated client
+# Stub prisma and prisma.models so tests can patch attributes without requiring generated client
+# This must be done BEFORE any imports of the ingestor package
+if "prisma" not in sys.modules:
+    prisma_module = types.ModuleType("prisma")
+
+    class _PrismaStub:
+        auto_register = True
+
+        def __init__(self, auto_register=False):
+            pass
+
+    # Json is used in snapshots_ingestor.py
+    class _JsonStub(dict):
+        pass
+
+    # Error classes used in snapshots_ingestor.py
+    class ClientNotConnectedError(Exception):
+        pass
+
+    class UniqueViolationError(Exception):
+        pass
+
+    # Create prisma.errors module
+    prisma_errors = types.ModuleType("prisma.errors")
+    prisma_errors.ClientNotConnectedError = ClientNotConnectedError
+    prisma_errors.UniqueViolationError = UniqueViolationError
+
+    prisma_module.Prisma = _PrismaStub
+    prisma_module.Json = _JsonStub
+    sys.modules["prisma"] = prisma_module
+    sys.modules["prisma.errors"] = prisma_errors
+
 if "prisma.models" not in sys.modules:
     prisma_models = types.ModuleType("prisma.models")
 

@@ -4,7 +4,7 @@ from unittest import mock
 import pytest
 import pytz
 
-from options.util import (
+from ingestor.util import (
     TIME_ZONE,
     OptionContractSnapshot,
     convert_to_nyc_time,
