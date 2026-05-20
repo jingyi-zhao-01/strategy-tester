@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   tests:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -73,7 +73,7 @@ jobs:
 
   sonar:
     needs: tests
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
@@ -99,7 +99,7 @@ jobs:
   build-and-publish-images:
     needs: sonar
     if: github.event_name != 'pull_request'
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
