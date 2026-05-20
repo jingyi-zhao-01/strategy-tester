@@ -1,8 +1,11 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ingestor.retriever import OptionRetriever
+from microservices.option_ingestor.retriever import OptionRetriever
+
+THIRD_BATCH_INDEX = 2
 
 
 @pytest.fixture
@@ -25,7 +28,7 @@ async def test_ingest_time_raises_if_not_set():
 
 
 @pytest.mark.asyncio
-async def test_retrieve_all_success(monkeypatch, retriever):
+async def test_retrieve_all_success(retriever):
     mock_contracts = [MagicMock(), MagicMock()]
     with patch("prisma.models.Options.prisma") as mock_prisma:
         mock_prisma.return_value.find_many = AsyncMock(return_value=mock_contracts)
@@ -35,7 +38,7 @@ async def test_retrieve_all_success(monkeypatch, retriever):
 
 
 @pytest.mark.asyncio
-async def test_retrieve_all_error(monkeypatch, retriever):
+async def test_retrieve_all_error(retriever):
     with patch("prisma.models.Options.prisma") as mock_prisma:
         mock_prisma.return_value.find_many = AsyncMock(side_effect=Exception("fail"))
         retriever.with_ingest_time("2025-01-01T00:00:00Z")
@@ -44,23 +47,23 @@ async def test_retrieve_all_error(monkeypatch, retriever):
 
 
 @pytest.mark.asyncio
-async def test_stream_retrieve(monkeypatch, retriever):
+async def test_stream_retrieve(retriever):
     batch1 = [MagicMock()]
     batch2 = [MagicMock()]
     batch3 = [MagicMock()]
 
     async def fake_find_many(**kwargs):
+        await asyncio.sleep(0)
         if fake_find_many.counter == 0:
             fake_find_many.counter += 1
             return batch1
-        elif fake_find_many.counter == 1:
+        if fake_find_many.counter == 1:
             fake_find_many.counter += 1
             return batch2
-        elif fake_find_many.counter == 2:  # noqa: PLR2004
+        if fake_find_many.counter == THIRD_BATCH_INDEX:
             fake_find_many.counter += 1
             return batch3
-        else:
-            return []
+        return []
 
     fake_find_many.counter = 0
     with patch("prisma.models.Options.prisma") as mock_prisma:
@@ -73,7 +76,7 @@ async def test_stream_retrieve(monkeypatch, retriever):
 
 
 @pytest.mark.asyncio
-async def test_stream_retrieve_error(monkeypatch, retriever):
+async def test_stream_retrieve_error(retriever):
     with patch("prisma.models.Options.prisma") as mock_prisma:
         mock_prisma.return_value.find_many = AsyncMock(side_effect=Exception("fail"))
         retriever.with_ingest_time("2025-01-01T00:00:00Z")

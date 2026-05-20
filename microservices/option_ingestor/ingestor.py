@@ -2,25 +2,20 @@
 
 import asyncio
 import traceback
-
-# Avoid hard dependency bindings to enable unit tests to monkeypatch via module paths
 from importlib import import_module
 
 from lib.observability import Log
-from ingestor.util import (
-    get_current_datetime,
-    option_expiration_date_to_datetime,
-)
-from prisma.models import Options
-
-from ingestor.decorator import (
+from microservices.option_ingestor.api import Fetcher
+from microservices.option_ingestor.retriever import OptionRetriever
+from microservices.shared.decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
     bounded_async_sem,
     bounded_db_connection,
     traced_span_async,
 )
-from ingestor.models import OptionIngestParams, OptionsContract
-from ingestor.retriever import OptionRetriever
+from microservices.shared.models import OptionIngestParams, OptionsContract
+from microservices.shared.util import get_current_datetime, option_expiration_date_to_datetime
+from prisma.models import Options
 
 
 class OptionIngestor:
@@ -40,8 +35,7 @@ class OptionIngestor:
         """Ingest option contracts from the API and store them in the database."""
         for target in underlying_assets:
             underlying_asset = target.underlying_asset
-            fetcher = import_module("ingestor.api.options").Fetcher  # type: ignore
-            core = fetcher(underlying_asset)
+            core = Fetcher(underlying_asset)
             calls = core.get_call_contracts()
             puts = core.get_put_contracts()
 

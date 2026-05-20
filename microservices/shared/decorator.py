@@ -1,28 +1,22 @@
 import asyncio
 import contextlib
+import os
 from importlib import import_module
 
-from dotenv import load_dotenv
 from opentelemetry import trace
 from opentelemetry.trace import SpanKind
 
 from lib.observability.log import Log
 
-load_dotenv()
-
-CONCURRENCY_LIMIT = 200
-DATA_BASE_CONCURRENCY_LIMIT = 10
-OPTION_BATCH_RETRIEVAL_SIZE = 500
+CONCURRENCY_LIMIT = int(os.getenv("INGEST_CONCURRENCY_LIMIT", "200"))
+DATA_BASE_CONCURRENCY_LIMIT = int(os.getenv("INGEST_DB_CONCURRENCY_LIMIT", "10"))
+OPTION_BATCH_RETRIEVAL_SIZE = int(os.getenv("INGEST_OPTION_BATCH_SIZE", "500"))
 _db_semaphore = asyncio.Semaphore(DATA_BASE_CONCURRENCY_LIMIT)
 
-# SystemMetricsInstrumentor().instrument()
-# tracer = trace.get_tracer("polygon")
 tracer = trace.get_tracer(__name__)
 
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
-# Use import_module to avoid hard dependency on Prisma at import time
-# This allows tests to mock the prisma module
 _prisma_module = import_module("prisma")
 Prisma = _prisma_module.Prisma
 db = Prisma(auto_register=True)
@@ -30,91 +24,67 @@ _db_connected = False
 _db_lock = asyncio.Lock()
 
 
+async def _ensure_db_connected(client) -> bool:
+    global _db_connected  # noqa: PLW0603
+    did_connect = False
+    async with _db_lock:
+        if not _db_connected:
+            await client.connect()
+            _db_connected = True
+            did_connect = True
+            _log_connection_pool_stats()
+    return did_connect
+
+
+async def _close_db_if_open(client, should_close: bool) -> None:
+    global _db_connected  # noqa: PLW0603
+    if should_close:
+        await client.disconnect()
+        _db_connected = False
+
+
 def bounded_db_connection(func):
     async def wrapper(*args, **kwargs):
-        global _db_connected  # noqa: PLW0603
         client = db
         if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
-            did_connect = False
-            # Only connect once, reuse the connection
-            async with _db_lock:
-                if not _db_connected:
-                    try:
-                        # Log.debug("Prisma connect() sees DATABASE_URL = %s",
-                        #  os.getenv("DATABASE_URL"))
-                        await client.connect()
-                        _db_connected = True
-                        did_connect = True
-                        # Log pool info after connection
-                        _log_connection_pool_stats()
-                    except Exception:
-                        # Log.debug("Prisma connect() failed: %s", e)
-                        raise
-            # Limit concurrent DB operations to the connection pool size
-            # This prevents overwhelming the database connection pool
+            did_connect = await _ensure_db_connected(client)
             try:
                 async with _db_semaphore:
-                    # Log connection stats before each operation
                     _log_connection_pool_stats()
                     return await func(*args, **kwargs)
             finally:
-                if did_connect:
-                    await client.disconnect()
-                    _db_connected = False
-        else:
-            return await func(*args, **kwargs)
+                await _close_db_if_open(client, should_close=did_connect)
+        return await func(*args, **kwargs)
 
     return wrapper
 
 
 def bounded_db_connection_asyncgen(func):
-    """Wrap async generators with database connection and concurrency management.
-
-    Ensures:
-    1. Database connection is established once and reused
-    2. Connection pool semaphore limits concurrent database operations
-    3. Connection pool statistics are logged
-    """
-
     async def wrapper(*args, **kwargs):
-        global _db_connected  # noqa: PLW0603
         client = db
         if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
-            did_connect = False
-            # Only connect once, reuse the connection
-            async with _db_lock:
-                if not _db_connected:
-                    await client.connect()
-                    _db_connected = True
-                    did_connect = True
-                    _log_connection_pool_stats()
+            did_connect = await _ensure_db_connected(client)
             try:
-                # For async generators, limit concurrency per yield
                 async for item in func(*args, **kwargs):
                     async with _db_semaphore:
                         _log_connection_pool_stats()
                         yield item
             finally:
-                if did_connect:
-                    await client.disconnect()
-                    _db_connected = False
-        else:
-            async for item in func(*args, **kwargs):
-                yield item
+                await _close_db_if_open(client, should_close=did_connect)
+            return
+
+        async for item in func(*args, **kwargs):
+            yield item
 
     return wrapper
 
 
 def _log_connection_pool_stats():
-    """Extract and log database connection pool statistics."""
     try:
-        # Access the underlying asyncpg pool from Prisma's engine
-        # Using type ignore for private attribute access
         engine = getattr(db, "_engine", None)  # type: ignore[attr-defined]
         if engine and hasattr(engine, "_pool"):
             pool = engine._pool
             if pool:
-                # Try to get active connections count
                 active_conns = len(pool._holders) if hasattr(pool, "_holders") else "unknown"
                 min_size = pool._minsize if hasattr(pool, "_minsize") else "unknown"
                 max_size = pool._maxsize if hasattr(pool, "_maxsize") else "unknown"

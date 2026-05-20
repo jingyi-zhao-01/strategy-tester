@@ -4,9 +4,9 @@ from unittest import mock
 import pytest
 import pytz
 
-from ingestor.util import (
+from microservices.shared.models import OptionContractSnapshot
+from microservices.shared.util import (
     TIME_ZONE,
-    OptionContractSnapshot,
     convert_to_nyc_time,
     convert_to_nyc_time_ns,
     format_snapshot,

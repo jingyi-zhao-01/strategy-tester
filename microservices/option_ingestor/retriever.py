@@ -1,10 +1,9 @@
-# TODO: Isolate
 from collections.abc import AsyncGenerator
 from importlib import import_module
 from typing import TYPE_CHECKING
 
 from lib.observability import Log
-from ingestor.decorator import (
+from microservices.shared.decorator import (
     CONCURRENCY_LIMIT,
     OPTION_BATCH_RETRIEVAL_SIZE,
     bounded_db_connection,
@@ -18,7 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 class OptionRetriever:
     def __init__(self, concurrency_limit=CONCURRENCY_LIMIT, batch_size=OPTION_BATCH_RETRIEVAL_SIZE):
-        self._ingest_time = None  # No time initialization here - subscribes to ingestor's time
+        self._ingest_time = None
         self.concurrency_limit = concurrency_limit
         self.skip_expired = True
         self.batch_size = batch_size
@@ -56,7 +55,7 @@ class OptionRetriever:
             while True:
                 batch = await options_model.prisma().find_many(
                     skip=offset,
-                    take=OPTION_BATCH_RETRIEVAL_SIZE,
+                    take=self.batch_size,
                     where={"expiration_date": {"gte": self.ingest_time}},
                 )
                 if not batch:
@@ -69,6 +68,4 @@ class OptionRetriever:
             return
 
 
-__all__ = [
-    "OptionRetriever",
-]
+__all__ = ["OptionRetriever"]

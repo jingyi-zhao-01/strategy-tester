@@ -1,9 +1,10 @@
-# Ensure repository root is on sys.path so 'ingestor', 'trade', and 'lib' packages are importable
+# Ensure repository root is on sys.path so local packages are importable
 import os
 import sys
 import types
 
 ROOT = os.path.dirname(__file__)
+PRISMA_MODELS_MODULE = "prisma.models"
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
@@ -11,7 +12,7 @@ if ROOT not in sys.path:
 os.environ.setdefault("POLYGON_API_KEY", "test-key")
 
 # Stub prisma and prisma.models so tests can patch attributes without requiring generated client
-# This must be done BEFORE any imports of the ingestor package
+# This must be done BEFORE any imports of modules that require prisma stubs
 if "prisma" not in sys.modules:
     prisma_module = types.ModuleType("prisma")
 
@@ -42,7 +43,7 @@ if "prisma" not in sys.modules:
     sys.modules["prisma"] = prisma_module
     sys.modules["prisma.errors"] = prisma_errors
 
-if "prisma.models" not in sys.modules:
+if PRISMA_MODELS_MODULE not in sys.modules:
     prisma_models = types.ModuleType("prisma.models")
 
     class _BaseModel:
@@ -58,4 +59,4 @@ if "prisma.models" not in sys.modules:
 
     prisma_models.Options = Options
     prisma_models.OptionSnapshot = OptionSnapshot
-    sys.modules["prisma.models"] = prisma_models
+    sys.modules[PRISMA_MODELS_MODULE] = prisma_models

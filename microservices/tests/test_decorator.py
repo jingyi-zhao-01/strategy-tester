@@ -2,19 +2,22 @@ import asyncio
 
 import pytest
 
-from ingestor import decorator
-from ingestor.decorator import bounded_async_sem, bounded_db_connection
+from microservices.shared import decorator
+from microservices.shared.decorator import bounded_async_sem, bounded_db_connection
+
+EXPECTED_MAX_CONCURRENCY = 2
 
 
 class _MockPrisma:
     async def connect(self):
-        pass
+        # Intentional async no-op for test double behavior.
+        await asyncio.sleep(0)
 
     async def disconnect(self):
-        pass
+        # Intentional async no-op for test double behavior.
+        await asyncio.sleep(0)
 
 
-# TODO: TEMP
 decorator.db = _MockPrisma()
 
 
@@ -27,15 +30,16 @@ async def test_bounded_db_connection_and_semaphore(monkeypatch):
 
     class MockPrisma:
         async def connect(self):
+            await asyncio.sleep(0)
             open_calls.append(1)
 
         async def disconnect(self):
+            await asyncio.sleep(0)
             close_calls.append(1)
 
-    # Patch db in the decorator's closure
-    monkeypatch.setattr("ingestor.decorator.db", MockPrisma())
+    monkeypatch.setattr("microservices.shared.decorator.db", MockPrisma())
 
-    @bounded_async_sem(limit=2)
+    @bounded_async_sem(limit=EXPECTED_MAX_CONCURRENCY)
     async def coroutine_task(i, delay=0.1):
         nonlocal concurrent, max_concurrent
         concurrent += 1
@@ -51,6 +55,6 @@ async def test_bounded_db_connection_and_semaphore(monkeypatch):
 
     results = await batch_task()
     assert sorted(results) == list(range(5))
-    assert max_concurrent == 2  # noqa: PLR2004
+    assert max_concurrent == EXPECTED_MAX_CONCURRENCY
     assert len(open_calls) == 1
     assert len(close_calls) == 1

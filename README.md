@@ -9,3 +9,46 @@
 
 - Visualization of Option Chain in 4 dimensions for an underlying_asset (strike-price, OpenInterest, expiration-date, updated time) so you know how it evolves overtime
 <img width="3726" height="1813" alt="image" src="https://github.com/user-attachments/assets/4a3c2231-ade5-45ec-850e-a97e217ed524" />
+
+## Ingestion Microservices
+
+The ingestion workflow is split into two isolated services:
+
+- `option-ingestor` for contract metadata ingestion
+- `snapshot-ingestor` for market snapshot ingestion
+
+Both services are configured only through environment variables.
+
+### Required Variables
+
+- `POLYGON_API_KEY`
+- `DATABASE_URL`
+
+### Option Targets Injection
+
+Use one of:
+
+- `OPTION_INGEST_TARGETS` as JSON array
+- `OPTION_INGEST_SYMBOLS` as comma-separated symbols
+
+Example:
+
+```bash
+export OPTION_INGEST_TARGETS='[
+	{"symbol":"NVDA","price_range":[100,250],"year_range":[2026,2027]},
+	{"symbol":"AAPL","year_range":[2026,2027]}
+]'
+```
+
+### Optional Runtime Variables
+
+- `DOTENV_PATH`
+- `OPTION_INGEST_SERVICE_NAME`
+- `SNAPSHOT_INGEST_SERVICE_NAME`
+- `OPTION_INGEST_ENABLE_OTEL`
+- `SNAPSHOT_INGEST_ENABLE_OTEL`
+- `INGEST_CONCURRENCY_LIMIT`
+- `INGEST_DB_CONCURRENCY_LIMIT`
+- `INGEST_OPTION_BATCH_SIZE`
+- `SNAPSHOT_FETCH_CONCURRENCY`
+- `INGEST_TIME_ZONE`

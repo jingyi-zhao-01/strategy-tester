@@ -41,7 +41,7 @@ ingest_snapshots = "cli.ingest_snapshots:main"
 
 
 [tool.hatch.build.targets.wheel]
-packages = ["ingestor", "trade", "lib"]
+packages = ["trade", "lib", "cli", "microservices"]
 
 [tool.hatch.dotenv]
 path = ".env"
@@ -73,7 +73,7 @@ ignore = ["D100", "D101", "D102", "D103", "D107", "D203", "D213"]
 typeCheckingMode = "basic"
 pythonVersion = "3.12"
 include = ["."]
-exclude = ["__pycache__", "build", "dist", "ingestor/tests"]
+exclude = ["__pycache__", "build", "dist"]
 extraPaths = ["typings"]
 stubPath = "typings"
 reportMissingModuleSource = "none"
@@ -81,5 +81,5 @@ reportMissingModuleSource = "none"
 
 [tool.coverage.run]
 relative_files = true
-source = ["ingestor", "lib"]
+source = ["microservices", "lib"]
 branch = true

@@ -6,16 +6,20 @@ import httpx
 from polygon import RESTClient
 
 from lib.observability import Log
+from microservices.shared.decorator import (
+    bounded_async_sem,
+    traced_span_async,
+    traced_span_sync,
+)
+from microservices.shared.models import OptionContractSnapshot, OptionsContract
+from microservices.shared.util import parse_option_symbol
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options  # type: ignore
 
 
-from ..decorator import bounded_async_sem, traced_span_async, traced_span_sync
-from ..models import OptionContractSnapshot, OptionsContract
-from ..util import parse_option_symbol
-
 NOT_FOUND_STATUS_CODE = 404
+SNAPSHOT_FETCH_CONCURRENCY = int(os.getenv("SNAPSHOT_FETCH_CONCURRENCY", "300"))
 
 
 class Fetcher:
@@ -26,7 +30,6 @@ class Fetcher:
             raise ValueError("POLYGON_API_KEY environment variable is not set")
         self.client = RESTClient(self.api_key)
 
-    # TODO: make async
     @traced_span_sync(name="fetch_call_contracts", attributes={"module": "POLYGON"})
     def get_call_contracts(self) -> list[OptionsContract]:
         contracts: list[OptionsContract] = []
@@ -41,8 +44,6 @@ class Fetcher:
                 contracts.append(contract)
         return contracts
 
-    # TODO: make async
-
     @traced_span_sync(name="fetch_put_contracts", attributes={"module": "POLYGON"})
     def get_put_contracts(self) -> list[OptionsContract]:
         contracts: list[OptionsContract] = []
@@ -56,12 +57,6 @@ class Fetcher:
             if isinstance(contract, OptionsContract):
                 contracts.append(contract)
         return contracts
-
-    # def get_contract_snapshot(
-    #     self, underlying_asset: str, option_ticker_name: str
-    # ) -> OptionContractSnapshot:
-    #     snapshot = self.client.get_snapshot_option(underlying_asset, option_ticker_name)
-    #     return snapshot
 
     @traced_span_async(name="fetch_daily_snapshot", attributes={"module": "POLYGON"})
     async def fetch_daily_snapshot_async(
@@ -85,14 +80,14 @@ class Fetcher:
                         f"(URL: {url})"
                     )
                     return None
-                else:
-                    Log.error(
-                        f"HTTP error {exc.response.status_code}: {exc.response.text} | "
-                        f"underlying_asset={underlying_asset}, "
-                        f"option_ticker_name={option_ticker_name}, "
-                        f"url={url}"
-                    )
-                    return None  # or raise if you want to stop on other errors
+
+                Log.error(
+                    f"HTTP error {exc.response.status_code}: {exc.response.text} | "
+                    f"underlying_asset={underlying_asset}, "
+                    f"option_ticker_name={option_ticker_name}, "
+                    f"url={url}"
+                )
+                return None
 
 
 def get_contract_within_price_range(
@@ -125,9 +120,7 @@ def get_contract_within_price_range(
     ]
 
 
-# polygon api key has a concurrency limit
-# TODO: modify to fetch_snapshot_stream
-@bounded_async_sem(limit=300)
+@bounded_async_sem(limit=SNAPSHOT_FETCH_CONCURRENCY)
 async def fetch_snapshots_batch(
     contracts: list["Options"], *args, **kwargs
 ) -> list[OptionContractSnapshot]:
@@ -140,3 +133,6 @@ async def fetch_snapshots_batch(
     ]
     results = await asyncio.gather(*tasks)
     return [snapshot for snapshot in results if snapshot is not None]
+
+
+__all__ = ["Fetcher", "get_contract_within_price_range", "fetch_snapshots_batch"]
