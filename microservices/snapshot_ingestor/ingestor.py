@@ -1,9 +1,9 @@
 """Ingestor for option snapshots (market data, greeks, etc.)."""
 
 import asyncio
+import logging
 import traceback
 
-from lib.observability import Log
 from microservices.option_ingestor.api import fetch_snapshots_batch
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.shared.decorator import (
@@ -19,6 +19,8 @@ from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from prisma.models import OptionSnapshot
 
+logger = logging.getLogger(__name__)
+
 
 class OptionSnapshotsIngestor(OptionIngestor):
     """Ingestor specifically for option snapshots (market data, greeks, etc.)."""
@@ -30,7 +32,7 @@ class OptionSnapshotsIngestor(OptionIngestor):
         try:
             total_contracts = 0
             async for contracts_batch in self.option_retriever.stream_retrieve_active():
-                Log.info(f"Processing batch of {len(contracts_batch)} contracts...")
+                logger.info("Processing batch of %s contracts...", len(contracts_batch))
                 total_contracts += len(contracts_batch)
                 snapshots = await fetch_snapshots_batch(contracts_batch)
                 await asyncio.gather(
@@ -39,12 +41,12 @@ class OptionSnapshotsIngestor(OptionIngestor):
                         for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
                     ]
                 )
-            Log.info(
+            logger.info(
                 f"All option snapshots processed successfully. "
                 f"Total contracts processed: {total_contracts}"
             )
         except Exception as e:
-            Log.error(f"Error during option snapshots ingestion: {e}\n{traceback.format_exc()}")
+            logger.exception("Error during option snapshots ingestion: %s", e)
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
     @traced_span_async(name="_upsert_option_snapshot", attributes={"module": "DB"})
@@ -82,11 +84,11 @@ class OptionSnapshotsIngestor(OptionIngestor):
                     },
                     data=payload,
                 )
-                Log.info(
+                logger.info(
                     f"{curr_datetime} Inserted snapshot for {contract_ticker}: "
                     f"OI={snapshot.open_interest}"
                 )
-                Log.info(format_snapshot(contract_ticker, snapshot))
+                logger.info(format_snapshot(contract_ticker, snapshot))
                 return result
             except Exception as e:
                 should_retry = _handle_snapshot_upsert_error(
@@ -173,25 +175,27 @@ def _handle_snapshot_upsert_error(
     attempt = context["attempt"]
 
     if isinstance(error, UniqueViolationError):
-        Log.info(f"{contract_ticker} at {last_updated_dt} has no new update on snapshot")
+        logger.info("%s at %s has no new update on snapshot", contract_ticker, last_updated_dt)
         return False
     if isinstance(error, OptionTickerNeverActiveError):
-        Log.info(f"{contract_ticker} is not active")
+        logger.info("%s is not active", contract_ticker)
         return False
     if isinstance(error, ClientNotConnectedError):
-        Log.error(f"Database connection error: {error}. Retrying up to {max_retries} times...")
+        logger.error(
+            "Database connection error: %s. Retrying up to %s times...", error, max_retries
+        )
         return False
 
     next_attempt = attempt + 1
-    Log.error(
+    logger.error(
         f"{curr_datetime} Error inserting option snapshot for "
         f"{contract_ticker}: {error} (attempt {next_attempt}/{max_retries})"
     )
     if next_attempt < max_retries:
         return True
 
-    Log.error(traceback.format_exc())
-    Log.error(f"Failed to insert snapshot for {contract_ticker} after {max_retries} attempts")
+    logger.error(traceback.format_exc())
+    logger.error("Failed to insert snapshot for %s after %s attempts", contract_ticker, max_retries)
     return False
 
 

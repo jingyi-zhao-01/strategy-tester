@@ -1,8 +1,10 @@
 import json
+import logging
 
 from cli.ingest_options import main as ingest_options_main
 from cli.ingest_snapshots import main as ingest_snapshots_main
-from lib.observability import Log
+
+logger = logging.getLogger(__name__)
 
 
 def ping(event, context):
@@ -22,7 +24,7 @@ def ingest_options_handler(event, context):
             "body": json.dumps({"message": "Options ingestion completed successfully"}),
         }
     except Exception as e:
-        Log.error(f"Error during options ingestion: {e}")
+        logger.exception("Error during options ingestion: %s", e)
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
 
@@ -35,7 +37,7 @@ def ingest_option_snapshots_handler(event, context):
             "body": json.dumps({"message": "Option snapshots ingestion completed successfully"}),
         }
     except Exception as e:
-        Log.error(f"Error during option snapshots ingestion: {e}")
+        logger.exception("Error during option snapshots ingestion: %s", e)
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 
 
@@ -44,5 +46,5 @@ def migrate_expired_options_handler(event, context):
     try:
         raise NotImplementedError("Expired options migration is not implemented yet.")
     except Exception as e:
-        Log.error(f"Error during expired options migration: {e}")
+        logger.exception("Error during expired options migration: %s", e)
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}

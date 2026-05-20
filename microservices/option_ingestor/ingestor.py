@@ -1,10 +1,9 @@
 """Ingestor for option contracts."""
 
 import asyncio
-import traceback
+import logging
 from importlib import import_module
 
-from lib.observability import Log
 from microservices.option_ingestor.api import Fetcher
 from microservices.option_ingestor.retriever import OptionRetriever
 from microservices.shared.decorator import (
@@ -16,6 +15,8 @@ from microservices.shared.decorator import (
 from microservices.shared.models import OptionIngestParams, OptionsContract
 from microservices.shared.util import get_current_datetime, option_expiration_date_to_datetime
 from prisma.models import Options
+
+logger = logging.getLogger(__name__)
 
 
 class OptionIngestor:
@@ -40,25 +41,25 @@ class OptionIngestor:
             puts = core.get_put_contracts()
 
             contracts = calls + puts
-            Log.info(f"Total contracts found for {underlying_asset}: {len(contracts)}")
+            logger.info("Total contracts found for %s: %s", underlying_asset, len(contracts))
             if not contracts:
-                Log.warn(f"No UnExpired contracts found for {underlying_asset}")
+                logger.warning("No UnExpired contracts found for %s", underlying_asset)
                 continue
 
             await asyncio.gather(
                 *[self._upsert_option_contract(contract) for contract in contracts]
             )
-            Log.info(f"All contracts for {underlying_asset} processed successfully")
+            logger.info("All contracts for %s processed successfully", underlying_asset)
 
     async def _retrieve_all_option_contracts(self) -> list["Options"]:
         """Retrieve all option contracts from the database."""
         try:
             options = import_module("prisma.models").Options  # type: ignore
             contracts = await options.prisma().find_many()
-            Log.info(f"Retrieved {len(contracts)} option contracts from the database.")
+            logger.info("Retrieved %s option contracts from the database.", len(contracts))
             return contracts
         except Exception as e:
-            Log.error(f"Error fetching option contracts: {e}")
+            logger.exception("Error fetching option contracts: %s", e)
             return []
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
@@ -67,11 +68,12 @@ class OptionIngestor:
         """Upsert a single option contract into the database."""
         expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
         try:
-            Log.info(
-                f"Upserting contract: {contract.ticker}, "
-                f"Strike: {contract.strike_price}, "
-                f"Expiration: {expiration_dt}, "
-                f"Type: {contract.contract_type}"
+            logger.info(
+                "Upserting contract: %s, Strike: %s, Expiration: %s, Type: %s",
+                contract.ticker,
+                contract.strike_price,
+                expiration_dt,
+                contract.contract_type,
             )
             options = import_module("prisma.models").Options  # type: ignore
             return await options.prisma().upsert(
@@ -101,8 +103,12 @@ class OptionIngestor:
                 },
             )
         except Exception as e:
-            Log.error(f"Error upserting contract {contract.ticker}: {e} ({type(e).__name__})")
-            Log.error(traceback.format_exc())
+            logger.exception(
+                "Error upserting contract %s: %s (%s)",
+                contract.ticker,
+                e,
+                type(e).__name__,
+            )
             raise
 
 

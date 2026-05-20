@@ -16,7 +16,6 @@ class RuntimeConfig:
     """Runtime behavior shared by all ingestion services."""
 
     service_name: str
-    enable_otel: bool
 
 
 @dataclass(frozen=True)
@@ -60,7 +59,6 @@ def get_option_runtime_config() -> RuntimeConfig:
     """Build Option Ingestor runtime configuration from environment variables."""
     return RuntimeConfig(
         service_name=os.getenv("OPTION_INGEST_SERVICE_NAME", "option-ingestor"),
-        enable_otel=parse_bool("OPTION_INGEST_ENABLE_OTEL", True),
     )
 
 
@@ -68,7 +66,6 @@ def get_snapshot_runtime_config() -> RuntimeConfig:
     """Build Snapshot Ingestor runtime configuration from environment variables."""
     return RuntimeConfig(
         service_name=os.getenv("SNAPSHOT_INGEST_SERVICE_NAME", "snapshot-ingestor"),
-        enable_otel=parse_bool("SNAPSHOT_INGEST_ENABLE_OTEL", True),
     )
 
 

@@ -17,13 +17,7 @@ dependencies = [
     "polygon-api-client==1.15.1",
     "prisma==0.15.0",
     "pytz==2025.2",
-    "python-dotenv==1.1.1",
-    "opentelemetry-distro>=0.57b0,<0.58",
-    "opentelemetry-exporter-otlp>=1.36.0,<2.0.0",
-    "opentelemetry-instrumentation-requests>=0.57b0,<0.58",
-    "opentelemetry-instrumentation-httpx>=0.57b0,<0.58",
-    "opentelemetry-exporter-otlp-proto-grpc>=1.36.0,<2.0.0",
-    "opentelemetry-instrumentation-system-metrics>=0.57b0,<0.58"
+    "python-dotenv==1.1.1"
 ]
 
 [project.optional-dependencies]
@@ -41,7 +35,7 @@ ingest_snapshots = "cli.ingest_snapshots:main"
 
 
 [tool.hatch.build.targets.wheel]
-packages = ["trade", "lib", "cli", "microservices"]
+packages = ["trade", "cli", "microservices"]
 
 [tool.hatch.dotenv]
 path = ".env"
@@ -81,5 +75,5 @@ reportMissingModuleSource = "none"
 
 [tool.coverage.run]
 relative_files = true
-source = ["microservices", "lib"]
+source = ["microservices"]
 branch = true

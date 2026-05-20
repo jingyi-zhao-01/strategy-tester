@@ -46,7 +46,6 @@ define build_steps
 	uv pip freeze --python 3.12 | grep -v "pyqlib" > $(ARTIFACTS_DIR)/requirements.txt
 	uv pip install --python 3.12 --target $(ARTIFACTS_DIR) -r $(ARTIFACTS_DIR)/requirements.txt
 	cp -r cli/ $(ARTIFACTS_DIR)/
-	cp -r lib/ $(ARTIFACTS_DIR)/
 	cp -r microservices/ $(ARTIFACTS_DIR)/
 	cp -r prisma/ $(ARTIFACTS_DIR)/
 	cp -r typings/ $(ARTIFACTS_DIR)/

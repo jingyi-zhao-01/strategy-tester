@@ -12,9 +12,8 @@ def main():
     # Prepare environment for subprocess
     env = os.environ.copy()
 
-    # Build the command to run lambda_handler.py with opentelemetry-instrument
+    # Build the command to run lambda_handler.py directly.
     cmd = [
-        "opentelemetry-instrument",
         sys.executable,
         os.path.join(os.path.dirname(__file__), "lambda_handler.py"),
     ]

@@ -1,19 +1,13 @@
 import asyncio
-import contextlib
+import logging
 import os
 from importlib import import_module
-
-from opentelemetry import trace
-from opentelemetry.trace import SpanKind
-
-from lib.observability.log import Log
 
 CONCURRENCY_LIMIT = int(os.getenv("INGEST_CONCURRENCY_LIMIT", "200"))
 DATA_BASE_CONCURRENCY_LIMIT = int(os.getenv("INGEST_DB_CONCURRENCY_LIMIT", "10"))
 OPTION_BATCH_RETRIEVAL_SIZE = int(os.getenv("INGEST_OPTION_BATCH_SIZE", "500"))
 _db_semaphore = asyncio.Semaphore(DATA_BASE_CONCURRENCY_LIMIT)
-
-tracer = trace.get_tracer(__name__)
+logger = logging.getLogger(__name__)
 
 semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
 
@@ -88,9 +82,14 @@ def _log_connection_pool_stats():
                 active_conns = len(pool._holders) if hasattr(pool, "_holders") else "unknown"
                 min_size = pool._minsize if hasattr(pool, "_minsize") else "unknown"
                 max_size = pool._maxsize if hasattr(pool, "_maxsize") else "unknown"
-                Log.log_db_connection_pool_stats(active_conns, min_size, max_size)
+                logger.info(
+                    "Database pool stats - Active: %s, Min: %s, Max: %s",
+                    active_conns,
+                    min_size,
+                    max_size,
+                )
     except Exception as e:
-        Log.debug(f"Could not retrieve connection pool stats: {e}")
+        logger.debug("Could not retrieve connection pool stats: %s", e)
 
 
 def bounded_async_sem(limit=CONCURRENCY_LIMIT):
@@ -106,52 +105,37 @@ def bounded_async_sem(limit=CONCURRENCY_LIMIT):
     return wrapper
 
 
-def traced_span_async(
-    name: str, attributes: dict | None = None, kind: SpanKind = SpanKind.INTERNAL
-):
+def traced_span_async(name: str, attributes: dict | None = None, kind=None):
+    _ = (name, attributes, kind)
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
-            with tracer.start_as_current_span(name, kind=kind) as span:
-                if attributes:
-                    for k, v in attributes.items():
-                        with contextlib.suppress(Exception):
-                            span.set_attribute(k, v)
-                return await func(*args, **kwargs)
+            return await func(*args, **kwargs)
 
         return wrapper
 
     return decorator
 
 
-def traced_span_sync(name: str, attributes: dict | None = None, kind: SpanKind = SpanKind.INTERNAL):
+def traced_span_sync(name: str, attributes: dict | None = None, kind=None):
+    _ = (name, attributes, kind)
+
     def decorator(func):
         def wrapper(*args, **kwargs):
-            with tracer.start_as_current_span(name, kind=kind) as span:
-                if attributes:
-                    for k, v in attributes.items():
-                        with contextlib.suppress(Exception):
-                            span.set_attribute(k, v)
-
-                return func(*args, **kwargs)
+            return func(*args, **kwargs)
 
         return wrapper
 
     return decorator
 
 
-def traced_span_asyncgen(
-    name: str | None = None, attributes: dict | None = None, kind: SpanKind = SpanKind.CLIENT
-):
+def traced_span_asyncgen(name: str | None = None, attributes: dict | None = None, kind=None):
+    _ = (name, attributes, kind)
+
     def decorator(func):
         async def wrapper(*args, **kwargs):
-            span_name = name or f"{func.__module__}.{func.__name__}"
-            with tracer.start_as_current_span(span_name, kind=kind) as span:
-                if attributes:
-                    for k, v in attributes.items():
-                        with contextlib.suppress(Exception):
-                            span.set_attribute(k, v)
-                async for item in func(*args, **kwargs):
-                    yield item
+            async for item in func(*args, **kwargs):
+                yield item
 
         return wrapper
 

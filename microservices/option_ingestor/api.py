@@ -1,11 +1,11 @@
 import asyncio
+import logging
 import os
 from typing import TYPE_CHECKING
 
 import httpx
 from polygon import RESTClient
 
-from lib.observability import Log
 from microservices.shared.decorator import (
     bounded_async_sem,
     traced_span_async,
@@ -20,6 +20,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 NOT_FOUND_STATUS_CODE = 404
 SNAPSHOT_FETCH_CONCURRENCY = int(os.getenv("SNAPSHOT_FETCH_CONCURRENCY", "300"))
+logger = logging.getLogger(__name__)
 
 
 class Fetcher:
@@ -69,19 +70,19 @@ class Fetcher:
             try:
                 response = await client.get(url)
                 response.raise_for_status()
-                Log.info(
+                logger.info(
                     f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
                 )
                 return OptionContractSnapshot.from_dict(response.json().get("results"))
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == NOT_FOUND_STATUS_CODE:
-                    Log.warn(
+                    logger.warning(
                         f"Option not found or expired: {underlying_asset}/{option_ticker_name}"
                         f"(URL: {url})"
                     )
                     return None
 
-                Log.error(
+                logger.exception(
                     f"HTTP error {exc.response.status_code}: {exc.response.text} | "
                     f"underlying_asset={underlying_asset}, "
                     f"option_ticker_name={option_ticker_name}, "

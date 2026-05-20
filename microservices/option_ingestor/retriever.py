@@ -1,8 +1,8 @@
+import logging
 from collections.abc import AsyncGenerator
 from importlib import import_module
 from typing import TYPE_CHECKING
 
-from lib.observability import Log
 from microservices.shared.decorator import (
     CONCURRENCY_LIMIT,
     OPTION_BATCH_RETRIEVAL_SIZE,
@@ -13,6 +13,9 @@ from microservices.shared.decorator import (
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options  # type: ignore
+
+
+logger = logging.getLogger(__name__)
 
 
 class OptionRetriever:
@@ -37,10 +40,12 @@ class OptionRetriever:
         try:
             options_model = import_module("prisma.models").Options  # type: ignore
             contracts = await options_model.prisma().find_many()
-            Log.info(f"Retrieved {len(contracts)} unexpired option contracts from the database.")
+            logger.info(
+                "Retrieved %s unexpired option contracts from the database.", len(contracts)
+            )
             return contracts
         except Exception as e:
-            Log.error(f"Error fetching option contracts: {e}")
+            logger.exception("Error fetching option contracts: %s", e)
             return []
 
     @traced_span_asyncgen(name="stream_retrieve_active", attributes={"module": "NEON"})
@@ -50,7 +55,9 @@ class OptionRetriever:
     ) -> AsyncGenerator[list["Options"], None]:
         try:
             options_model = import_module("prisma.models").Options  # type: ignore
-            Log.info(f"Starting active contract retrieval for ingest session: {self.ingest_time}")
+            logger.info(
+                "Starting active contract retrieval for ingest session: %s", self.ingest_time
+            )
             offset = 0
             while True:
                 batch = await options_model.prisma().find_many(
@@ -60,11 +67,11 @@ class OptionRetriever:
                 )
                 if not batch:
                     break
-                Log.info(f"Retrieved batch at offset {offset} for session {self.ingest_time}")
+                logger.info("Retrieved batch at offset %s for session %s", offset, self.ingest_time)
                 yield batch
                 offset += len(batch)
         except Exception as e:
-            Log.error(f"Error streaming option contracts: {e}")
+            logger.exception("Error streaming option contracts: %s", e)
             return
 
 

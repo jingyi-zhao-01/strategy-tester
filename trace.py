@@ -2,10 +2,17 @@
 # pytest.skip("integration-only script; skip during unit tests", allow_module_level=True)
 
 import asyncio
+import logging
 
-from lib.observability import Log
 from microservices.option_ingestor.api import Fetcher
 from microservices.shared.decorator import traced_span_async
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
 @traced_span_async(name="test_polygon", attributes={"testcase": "decorator"})
@@ -26,7 +33,7 @@ def test_fetch():
 async def test_fetch_async():
     core = Fetcher("AAPL")
     snapshot = await core.fetch_daily_snapshot_async("NBIS", "O:NBIS251121C00070000")
-    Log.info(f"Fetched snapshot: {snapshot}")
+    logger.info("Fetched snapshot: %s", snapshot)
     # await mock_db_upsert(snapshot)
 
 
@@ -40,7 +47,7 @@ if __name__ == "__main__":
         for i, result in enumerate(results, 1):
             if isinstance(result, Exception):
                 errors += 1
-                Log.error(f"Run {i}: Error - {result}")
-        Log.info(f"Total errors: {errors}")
+                logger.error("Run %s: Error - %s", i, result)
+        logger.info("Total errors: %s", errors)
 
     asyncio.run(main())
