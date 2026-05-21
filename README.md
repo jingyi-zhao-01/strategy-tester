@@ -35,10 +35,29 @@ Example:
 
 ```bash
 export OPTION_INGEST_TARGETS='[
-	{"symbol":"NVDA","price_range":[100,250],"year_range":[2026,2027]},
-	{"symbol":"AAPL","year_range":[2026,2027]}
+ {"symbol":"NVDA","price_range":[100,250],"year_range":[2026,2027]},
+ {"symbol":"AAPL","year_range":[2026,2027]}
 ]'
 ```
+
+## Helm Chart Quick Reference
+
+Deploy `option-ingestor` and `snapshot-ingestor` with Helm:
+
+```sh
+helm install my-ingestor <chart> \
+ --set databaseUrl="<db-url>" \
+ --set polygonKey="<polygon-key>"
+```
+
+Only two required envs:
+
+- `DATABASE_URL`
+- `POLYGON_API_KEY`
+
+Kubernetes Secret is recommended for sensitive values.
+
+---
 
 ### Optional Runtime Variables
 
