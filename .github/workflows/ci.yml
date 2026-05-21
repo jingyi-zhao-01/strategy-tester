@@ -80,7 +80,7 @@ jobs:
   #         projectBaseDir: .
 
   build-and-publish-images:
-    needs: sonar
+    # needs: sonar
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
