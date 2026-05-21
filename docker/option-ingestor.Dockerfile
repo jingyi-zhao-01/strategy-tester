@@ -14,7 +14,7 @@ COPY prisma ./prisma
 COPY typings ./typings
 
 RUN set -eux; \
-	uv sync --locked --no-dev --no-build --no-install-project; \
-	prisma generate --schema=prisma/schema.prisma
+	uv sync --locked --no-dev; \
+	uv run prisma generate --schema=prisma/schema.prisma
 
 CMD ["python", "-c", "from microservices.option_ingestor.service import run; run()"]
