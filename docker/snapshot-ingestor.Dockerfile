@@ -13,7 +13,8 @@ COPY microservices ./microservices
 COPY prisma ./prisma
 COPY typings ./typings
 
-RUN uv sync --locked --no-dev --no-build \
-    && prisma generate --schema=prisma/schema.prisma
+RUN set -eux; \
+	uv sync --locked --no-dev --no-build --no-install-project; \
+	prisma generate --schema=prisma/schema.prisma
 
 CMD ["python", "-c", "from microservices.snapshot_ingestor.service import run; run()"]
