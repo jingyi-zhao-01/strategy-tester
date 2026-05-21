@@ -6,6 +6,10 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH"
 
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends libatomic1 \
+	&& rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml README.md ./
 COPY uv.lock ./
 COPY cli ./cli
