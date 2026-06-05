@@ -92,11 +92,13 @@ class Fetcher:
                     )
                     return None
 
-                logger.exception(
-                    f"HTTP error {exc.response.status_code}: {exc.response.text} | "
-                    f"underlying_asset={underlying_asset}, "
-                    f"option_ticker_name={option_ticker_name}, "
-                    f"url={url}"
+                logger.error(
+                    "HTTP error %s: %s | underlying_asset=%s, option_ticker_name=%s, url=%s",
+                    exc.response.status_code,
+                    exc.response.text,
+                    underlying_asset,
+                    option_ticker_name,
+                    url,
                 )
                 return None
             except httpx.RequestError as exc:

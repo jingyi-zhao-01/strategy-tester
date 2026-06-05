@@ -4,6 +4,8 @@ import asyncio
 import logging
 import traceback
 
+import httpx
+
 from microservices.option_ingestor.api import fetch_snapshots_batch
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.shared.decorator import (
@@ -45,8 +47,15 @@ class OptionSnapshotsIngestor(OptionIngestor):
                 f"All option snapshots processed successfully. "
                 f"Total contracts processed: {total_contracts}"
             )
+        except httpx.ConnectTimeout:
+            logger.error("Option snapshots ingestion aborted due to Polygon connect timeout")
+        except httpx.RequestError as exc:
+            logger.error(
+                "Option snapshots ingestion aborted due to network request error: %s",
+                type(exc).__name__,
+            )
         except Exception as e:
-            logger.exception("Error during option snapshots ingestion: %s", e)
+            logger.error("Error during option snapshots ingestion: %s", e)
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
     @traced_span_async(name="_upsert_option_snapshot", attributes={"module": "DB"})

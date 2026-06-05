@@ -74,3 +74,6 @@ Kubernetes Secret is recommended for sensitive values.
 - `INGEST_OPTION_BATCH_SIZE`
 - `SNAPSHOT_FETCH_CONCURRENCY`
 - `INGEST_TIME_ZONE`
+
+When deployed via Helm, these runtime variables are passed through each ingestor's
+`env` block in `charts/strategy-tester/values.yaml`.
