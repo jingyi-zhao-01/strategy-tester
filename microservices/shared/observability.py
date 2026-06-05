@@ -4,6 +4,7 @@ import logging
 import os
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
+from contextvars import ContextVar
 from threading import Lock
 from urllib.parse import parse_qsl
 
@@ -17,10 +18,12 @@ from opentelemetry.trace import SpanKind
 _TRACE_LOCK = Lock()
 _TRACE_READY = False
 _TRACER_NAME = "strategy-tester"
+_SERVICE_NAME: ContextVar[str] = ContextVar("strategy_tester_service_name", default="-")
 
 
 class TraceContextFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
+        record.service_name = _SERVICE_NAME.get()
         span_context = trace.get_current_span().get_span_context()
         if span_context.is_valid:
             record.trace_id = format(span_context.trace_id, "032x")
@@ -32,10 +35,11 @@ class TraceContextFilter(logging.Filter):
 
 
 def configure_service_logger(service_name: str) -> logging.Logger:
+    _SERVICE_NAME.set(service_name)
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format=(
-            "%(asctime)s %(levelname)s %(name)s trace_id=%(trace_id)s "
+            "%(asctime)s %(levelname)s service=%(service_name)s %(name)s trace_id=%(trace_id)s "
             "span_id=%(span_id)s %(message)s"
         ),
     )
