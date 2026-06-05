@@ -12,6 +12,7 @@ from microservices.shared.decorator import (
     traced_span_sync,
 )
 from microservices.shared.errors import OptionTickerNeverActiveError
+from microservices.shared.observability import configure_service_logger, initialize_tracing
 from microservices.shared.util import (
     convert_to_nyc_time,
     convert_to_nyc_time_ns,
@@ -33,6 +34,8 @@ __all__ = [
     "traced_span_async",
     "traced_span_asyncgen",
     "traced_span_sync",
+    "configure_service_logger",
+    "initialize_tracing",
     "OptionTickerNeverActiveError",
     "convert_to_nyc_time",
     "convert_to_nyc_time_ns",

@@ -74,6 +74,16 @@ class Fetcher:
                     f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
                 )
                 return OptionContractSnapshot.from_dict(response.json().get("results"))
+            except httpx.ConnectTimeout:
+                logger.error(
+                    "Connect timeout fetching snapshot | underlying_asset=%s, "
+                    "option_ticker_name=%s, timeout=%s, url=%s",
+                    underlying_asset,
+                    option_ticker_name,
+                    timeout,
+                    url,
+                )
+                return None
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code == NOT_FOUND_STATUS_CODE:
                     logger.warning(
@@ -87,6 +97,16 @@ class Fetcher:
                     f"underlying_asset={underlying_asset}, "
                     f"option_ticker_name={option_ticker_name}, "
                     f"url={url}"
+                )
+                return None
+            except httpx.RequestError as exc:
+                logger.error(
+                    "Request error fetching snapshot: %s | underlying_asset=%s, "
+                    "option_ticker_name=%s, url=%s",
+                    type(exc).__name__,
+                    underlying_asset,
+                    option_ticker_name,
+                    url,
                 )
                 return None
 

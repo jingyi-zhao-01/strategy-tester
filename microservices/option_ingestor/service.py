@@ -11,14 +11,11 @@ from microservices.config import (
 )
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.option_ingestor.retriever import OptionRetriever
+from microservices.shared.observability import configure_service_logger, initialize_tracing
 
 
 def _configure_logging(service_name: str) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    configure_service_logger(service_name)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger(service_name)
 
@@ -32,6 +29,7 @@ def run() -> None:
     runtime_config = get_option_runtime_config()
     retriever_config = get_retriever_config()
 
+    initialize_tracing(runtime_config.service_name)
     _configure_logging(service_name=runtime_config.service_name)
 
     retriever = OptionRetriever(

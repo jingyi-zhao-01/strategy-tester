@@ -1,7 +1,12 @@
 import asyncio
+import functools
 import logging
 import os
 from importlib import import_module
+
+from opentelemetry.trace import SpanKind
+
+from microservices.shared.observability import start_span_sync
 
 CONCURRENCY_LIMIT = int(os.getenv("INGEST_CONCURRENCY_LIMIT", "200"))
 DATA_BASE_CONCURRENCY_LIMIT = int(os.getenv("INGEST_DB_CONCURRENCY_LIMIT", "10"))
@@ -109,8 +114,19 @@ def traced_span_async(name: str, attributes: dict | None = None, kind=None):
     _ = (name, attributes, kind)
 
     def decorator(func):
+        @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            return await func(*args, **kwargs)
+            with start_span_sync(
+                name,
+                kind=kind or SpanKind.INTERNAL,
+                attributes=attributes,
+            ) as span:
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_attribute("error", True)
+                    raise
 
         return wrapper
 
@@ -121,8 +137,19 @@ def traced_span_sync(name: str, attributes: dict | None = None, kind=None):
     _ = (name, attributes, kind)
 
     def decorator(func):
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+            with start_span_sync(
+                name,
+                kind=kind or SpanKind.INTERNAL,
+                attributes=attributes,
+            ) as span:
+                try:
+                    return func(*args, **kwargs)
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_attribute("error", True)
+                    raise
 
         return wrapper
 
@@ -133,9 +160,20 @@ def traced_span_asyncgen(name: str | None = None, attributes: dict | None = None
     _ = (name, attributes, kind)
 
     def decorator(func):
+        @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            async for item in func(*args, **kwargs):
-                yield item
+            with start_span_sync(
+                name or func.__name__,
+                kind=kind or SpanKind.INTERNAL,
+                attributes=attributes,
+            ) as span:
+                try:
+                    async for item in func(*args, **kwargs):
+                        yield item
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_attribute("error", True)
+                    raise
 
         return wrapper
 
