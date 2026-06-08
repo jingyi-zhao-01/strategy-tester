@@ -191,6 +191,7 @@ def _handle_snapshot_upsert_error(
     last_updated_dt = context["last_updated_dt"]
     curr_datetime = context["curr_datetime"]
     attempt = context["attempt"]
+    next_attempt = attempt + 1
 
     if isinstance(error, UniqueViolationError):
         logger.info("%s at %s has no new update on snapshot", contract_ticker, last_updated_dt)
