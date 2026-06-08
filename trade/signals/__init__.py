@@ -1,2 +1,0 @@
-
-"""Trading signal generation package."""

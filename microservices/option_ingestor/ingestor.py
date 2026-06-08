@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from importlib import import_module
 
 from microservices.option_ingestor.api import Fetcher
@@ -12,11 +13,14 @@ from microservices.shared.decorator import (
     bounded_db_connection,
     traced_span_async,
 )
+from microservices.shared.errors import is_retryable_db_error
 from microservices.shared.models import OptionIngestParams, OptionsContract
 from microservices.shared.util import get_current_datetime, option_expiration_date_to_datetime
 from prisma.models import Options
 
 logger = logging.getLogger(__name__)
+DB_RETRY_MAX_ATTEMPTS = int(os.getenv("INGEST_DB_RETRY_MAX_ATTEMPTS", "3"))
+DB_RETRY_BASE_DELAY_SECONDS = float(os.getenv("INGEST_DB_RETRY_BASE_DELAY_SECONDS", "0.5"))
 
 
 class OptionIngestor:
@@ -64,52 +68,71 @@ class OptionIngestor:
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
     @traced_span_async(name="_upsert_option_contract", attributes={"module": "DB"})
-    async def _upsert_option_contract(self, contract: OptionsContract) -> "Options":
+    async def _upsert_option_contract(
+        self,
+        contract: OptionsContract,
+        max_retries: int = DB_RETRY_MAX_ATTEMPTS,
+        base_delay_seconds: float = DB_RETRY_BASE_DELAY_SECONDS,
+    ) -> "Options":
         """Upsert a single option contract into the database."""
         expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
-        try:
-            logger.info(
-                "Upserting contract: %s, Strike: %s, Expiration: %s, Type: %s",
-                contract.ticker,
-                contract.strike_price,
-                expiration_dt,
-                contract.contract_type,
-            )
-            options = import_module("prisma.models").Options  # type: ignore
-            return await options.prisma().upsert(
-                where={"ticker": str(contract.ticker)},
-                data={
-                    "create": {
-                        "ticker": str(contract.ticker),
-                        "underlying_ticker": str(contract.underlying_ticker),
-                        "strike_price": (
-                            float(contract.strike_price)
-                            if contract.strike_price is not None
-                            else 0.0
-                        ),
-                        "expiration_date": expiration_dt,
-                        "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(
+                    "Upserting contract: %s, Strike: %s, Expiration: %s, Type: %s",
+                    contract.ticker,
+                    contract.strike_price,
+                    expiration_dt,
+                    contract.contract_type,
+                )
+                options = import_module("prisma.models").Options  # type: ignore
+                return await options.prisma().upsert(
+                    where={"ticker": str(contract.ticker)},
+                    data={
+                        "create": {
+                            "ticker": str(contract.ticker),
+                            "underlying_ticker": str(contract.underlying_ticker),
+                            "strike_price": (
+                                float(contract.strike_price)
+                                if contract.strike_price is not None
+                                else 0.0
+                            ),
+                            "expiration_date": expiration_dt,
+                            "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
+                        },
+                        "update": {
+                            "underlying_ticker": str(contract.underlying_ticker),
+                            "strike_price": (
+                                float(contract.strike_price)
+                                if contract.strike_price is not None
+                                else 0.0
+                            ),
+                            "expiration_date": expiration_dt,
+                            "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
+                        },
                     },
-                    "update": {
-                        "underlying_ticker": str(contract.underlying_ticker),
-                        "strike_price": (
-                            float(contract.strike_price)
-                            if contract.strike_price is not None
-                            else 0.0
-                        ),
-                        "expiration_date": expiration_dt,
-                        "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
-                    },
-                },
-            )
-        except Exception as e:
-            logger.exception(
-                "Error upserting contract %s: %s (%s)",
-                contract.ticker,
-                e,
-                type(e).__name__,
-            )
-            raise
+                )
+            except Exception as e:
+                logger.exception(
+                    "Error upserting contract %s: %s (%s) attempt %s/%s",
+                    contract.ticker,
+                    e,
+                    type(e).__name__,
+                    attempt,
+                    max_retries,
+                )
+                if not is_retryable_db_error(e) or attempt >= max_retries:
+                    raise
+
+                delay = base_delay_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "Retrying contract %s after transient DB error in %.2fs",
+                    contract.ticker,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+
+        raise RuntimeError(f"Unreachable retry loop for contract {contract.ticker}")
 
 
 __all__ = ["OptionIngestor"]

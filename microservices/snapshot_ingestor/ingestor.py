@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import traceback
 
 import httpx
@@ -14,7 +15,7 @@ from microservices.shared.decorator import (
     bounded_db_connection,
     traced_span_async,
 )
-from microservices.shared.errors import OptionTickerNeverActiveError
+from microservices.shared.errors import OptionTickerNeverActiveError, is_retryable_db_error
 from microservices.shared.models import OptionContractSnapshot
 from microservices.shared.util import format_snapshot, ns_to_datetime
 from prisma import Json
@@ -22,6 +23,8 @@ from prisma.errors import ClientNotConnectedError, UniqueViolationError
 from prisma.models import OptionSnapshot
 
 logger = logging.getLogger(__name__)
+DB_RETRY_MAX_ATTEMPTS = int(os.getenv("INGEST_DB_RETRY_MAX_ATTEMPTS", "3"))
+DB_RETRY_BASE_DELAY_SECONDS = float(os.getenv("INGEST_DB_RETRY_BASE_DELAY_SECONDS", "0.5"))
 
 
 class OptionSnapshotsIngestor(OptionIngestor):
@@ -63,8 +66,8 @@ class OptionSnapshotsIngestor(OptionIngestor):
         self,
         contract_ticker: str,
         snapshot: OptionContractSnapshot,
-        max_retries: int = 1,
-        delay: float = 1.0,
+        max_retries: int = DB_RETRY_MAX_ATTEMPTS,
+        base_delay_seconds: float = DB_RETRY_BASE_DELAY_SECONDS,
     ) -> "OptionSnapshot | None":
         """Upsert a single option snapshot into the database."""
         last_updated_raw = _snapshot_last_updated_raw(snapshot)
@@ -111,7 +114,13 @@ class OptionSnapshotsIngestor(OptionIngestor):
                     max_retries=max_retries,
                 )
                 if should_retry:
+                    delay = base_delay_seconds * (2**attempt)
                     attempt += 1
+                    logger.warning(
+                        "Retrying snapshot upsert for %s after transient DB error in %.2fs",
+                        contract_ticker,
+                        delay,
+                    )
                     await asyncio.sleep(delay)
                     continue
                 return None
@@ -193,9 +202,17 @@ def _handle_snapshot_upsert_error(
         logger.error(
             "Database connection error: %s. Retrying up to %s times...", error, max_retries
         )
-        return False
+        return next_attempt < max_retries
+    if is_retryable_db_error(error):
+        logger.error(
+            "Transient database transport error for %s: %s (attempt %s/%s)",
+            contract_ticker,
+            type(error).__name__,
+            next_attempt,
+            max_retries,
+        )
+        return next_attempt < max_retries
 
-    next_attempt = attempt + 1
     logger.error(
         f"{curr_datetime} Error inserting option snapshot for "
         f"{contract_ticker}: {error} (attempt {next_attempt}/{max_retries})"

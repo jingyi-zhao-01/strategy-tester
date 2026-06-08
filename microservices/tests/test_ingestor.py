@@ -64,6 +64,37 @@ async def test_upsert_option_contract_success(ingestor):
 
 
 @pytest.mark.asyncio
+async def test_upsert_option_contract_retries_transient_db_error(ingestor):
+    contract = OptionsContract.from_dict(
+        {
+            "ticker": "TST",
+            "underlying_ticker": "TST",
+            "strike_price": 100.0,
+            "expiration_date": "2025-12-31",
+            "contract_type": "call",
+        }
+    )
+
+    class DataError(Exception):
+        pass
+
+    with (
+        patch("prisma.models.Options.prisma") as mock_prisma,
+        patch("microservices.option_ingestor.ingestor.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+    ):
+        mock_prisma.return_value.upsert = AsyncMock(
+            side_effect=[
+                DataError("P1001 Can't reach database server"),
+                "mocked",
+            ]
+        )
+        result = await ingestor._upsert_option_contract(contract)
+        assert result == "mocked"
+        assert mock_prisma.return_value.upsert.await_count == 2
+        mock_sleep.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_upsert_option_contract_error(ingestor):
     contract = OptionsContract.from_dict(
         {
@@ -88,6 +119,30 @@ async def test_upsert_option_snapshot_ticker_never_active(snapshots_ingestor):
         snapshot.day = MagicMock()
         snapshot.greeks = None
         await snapshots_ingestor._upsert_option_snapshot("TST", snapshot)
+
+
+@pytest.mark.asyncio
+async def test_upsert_option_snapshot_retries_client_not_connected(snapshots_ingestor):
+    from prisma.errors import ClientNotConnectedError
+
+    snapshot = MagicMock()
+    snapshot.day = MagicMock(last_updated=1, volume=1, close=1.0, open=1.0, change_percent=0.0)
+    snapshot.greeks = None
+    snapshot.open_interest = 1
+    snapshot.implied_volatility = 0.1
+
+    with (
+        patch("prisma.models.OptionSnapshot.prisma") as mock_prisma,
+        patch("microservices.snapshot_ingestor.ingestor.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+        patch("microservices.snapshot_ingestor.ingestor.ns_to_datetime", return_value="dt"),
+    ):
+        mock_prisma.return_value.upsert = AsyncMock(
+            side_effect=[ClientNotConnectedError("not connected"), "mocked"]
+        )
+        result = await snapshots_ingestor._upsert_option_snapshot("TST", snapshot)
+        assert result == "mocked"
+        assert mock_prisma.return_value.upsert.await_count == 2
+        mock_sleep.assert_awaited_once()
 
 
 def test_option_ingestor_requires_retriever():

@@ -1,7 +1,8 @@
 # ADR 0001: Use Job-Scoped Prisma Connection Lifecycle for Ingestion Runtimes
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-06-05
+- Implemented: 2026-06-08
 - Owners: strategy-tester ingestion runtime
 
 ## Context
@@ -46,9 +47,14 @@ This ADR does **not** approve removing concurrency controls. It only changes the
 
 ## Status of Implementation
 
-This ADR is documentation only at this stage.
+This ADR is implemented.
 
-No implementation is approved by this document alone, and the current decorator-based connection lifecycle remains in place until a separate code change is made.
+The runtime now manages Prisma lifecycle at the top-level service entrypoints:
+
+- [microservices/option_ingestor/service.py](../../../microservices/option_ingestor/service.py)
+- [microservices/snapshot_ingestor/service.py](../../../microservices/snapshot_ingestor/service.py)
+
+The shared decorators still enforce database concurrency boundaries, but they no longer own `connect()` / `disconnect()` transitions for each wrapped function call.
 
 ## Consequences
 
@@ -58,6 +64,7 @@ Expected benefits:
 - lower chance of accidental mid-job disconnect behavior
 - easier correlation between one job run and one database session lifecycle
 - cleaner future instrumentation around job-level database health
+- lower likelihood that one transient database fault cascades into extra client lifecycle errors
 
 Tradeoffs:
 
@@ -76,9 +83,13 @@ This ADR does not:
 
 ## Follow-Up
 
-Before implementation, a follow-up change should:
+Implemented by:
 
-1. move `connect()` / `disconnect()` to the top-level runtime entrypoints
-2. remove or narrow function-level connection wrappers
-3. add tests for normal completion, exception handling, and async generator flows
-4. verify that job-level lifecycle still respects existing database concurrency semaphores
+1. moving `connect()` / `disconnect()` to the top-level runtime entrypoints
+2. narrowing function-level wrappers so they only enforce concurrency boundaries
+3. adding regression tests for normal completion and exception handling at service runtime boundaries
+
+Remaining follow-up:
+
+1. review whether current DB concurrency defaults should be reduced further under production load
+2. consider chunked writes for large option batches to reduce blast radius during database instability

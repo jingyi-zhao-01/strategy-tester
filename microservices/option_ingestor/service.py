@@ -11,6 +11,7 @@ from microservices.config import (
 )
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.option_ingestor.retriever import OptionRetriever
+from microservices.shared import connect_db, disconnect_db
 from microservices.shared.observability import configure_service_logger, initialize_tracing
 
 
@@ -21,6 +22,14 @@ def _configure_logging(service_name: str) -> None:
 
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_job(ingestor: OptionIngestor, targets) -> None:
+    await connect_db()
+    try:
+        await ingestor.ingest_options(underlying_assets=targets)
+    finally:
+        await disconnect_db()
 
 
 def run() -> None:
@@ -40,5 +49,5 @@ def run() -> None:
     targets = get_option_targets_from_env()
 
     logger.info("-----------Starting option contracts ingestion...")
-    asyncio.run(ingestor.ingest_options(underlying_assets=targets))
+    asyncio.run(_run_job(ingestor=ingestor, targets=targets))
     logger.info("Option contracts ingestion completed successfully")

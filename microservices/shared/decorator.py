@@ -23,57 +23,38 @@ _db_connected = False
 _db_lock = asyncio.Lock()
 
 
-async def _ensure_db_connected(client) -> bool:
+async def connect_db() -> None:
     global _db_connected  # noqa: PLW0603
-    did_connect = False
     async with _db_lock:
         if not _db_connected:
-            await client.connect()
+            await db.connect()
             _db_connected = True
-            did_connect = True
             _log_connection_pool_stats()
-    return did_connect
 
 
-async def _close_db_if_open(client, should_close: bool) -> None:
+async def disconnect_db() -> None:
     global _db_connected  # noqa: PLW0603
-    if should_close:
-        await client.disconnect()
-        _db_connected = False
+    async with _db_lock:
+        if _db_connected:
+            await db.disconnect()
+            _db_connected = False
 
 
 def bounded_db_connection(func):
     async def wrapper(*args, **kwargs):
-        client = db
-        if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
-            did_connect = await _ensure_db_connected(client)
-            try:
-                async with _db_semaphore:
-                    _log_connection_pool_stats()
-                    return await func(*args, **kwargs)
-            finally:
-                await _close_db_if_open(client, should_close=did_connect)
-        return await func(*args, **kwargs)
+        async with _db_semaphore:
+            _log_connection_pool_stats()
+            return await func(*args, **kwargs)
 
     return wrapper
 
 
 def bounded_db_connection_asyncgen(func):
     async def wrapper(*args, **kwargs):
-        client = db
-        if client is not None and hasattr(client, "connect") and hasattr(client, "disconnect"):
-            did_connect = await _ensure_db_connected(client)
-            try:
-                async for item in func(*args, **kwargs):
-                    async with _db_semaphore:
-                        _log_connection_pool_stats()
-                        yield item
-            finally:
-                await _close_db_if_open(client, should_close=did_connect)
-            return
-
         async for item in func(*args, **kwargs):
-            yield item
+            async with _db_semaphore:
+                _log_connection_pool_stats()
+                yield item
 
     return wrapper
 
