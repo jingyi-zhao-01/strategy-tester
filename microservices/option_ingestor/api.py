@@ -20,6 +20,12 @@ if TYPE_CHECKING:  # pragma: no cover
 
 NOT_FOUND_STATUS_CODE = 404
 SNAPSHOT_FETCH_CONCURRENCY = int(os.getenv("SNAPSHOT_FETCH_CONCURRENCY", "300"))
+SNAPSHOT_FETCH_CONNECT_TIMEOUT = float(os.getenv("SNAPSHOT_FETCH_CONNECT_TIMEOUT", "10.0"))
+SNAPSHOT_FETCH_READ_TIMEOUT = float(os.getenv("SNAPSHOT_FETCH_READ_TIMEOUT", "10.0"))
+SNAPSHOT_HTTP_MAX_CONNECTIONS = int(os.getenv("SNAPSHOT_HTTP_MAX_CONNECTIONS", "50"))
+SNAPSHOT_HTTP_MAX_KEEPALIVE_CONNECTIONS = int(
+    os.getenv("SNAPSHOT_HTTP_MAX_KEEPALIVE_CONNECTIONS", "20")
+)
 logger = logging.getLogger(__name__)
 
 
@@ -61,56 +67,89 @@ class Fetcher:
 
     @traced_span_async(name="fetch_daily_snapshot", attributes={"module": "POLYGON"})
     async def fetch_daily_snapshot_async(
-        self, underlying_asset: str, option_ticker_name: str, *args, **kwargs
+        self,
+        underlying_asset: str,
+        option_ticker_name: str,
+        *args,
+        client: httpx.AsyncClient | None = None,
+        **kwargs,
     ) -> OptionContractSnapshot | None:
         url = f"https://api.polygon.io/v3/snapshot/options/{underlying_asset}/{option_ticker_name}?apiKey={self.api_key}"
 
-        timeout = kwargs.get("timeout", 10.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            try:
-                response = await client.get(url)
-                response.raise_for_status()
-                logger.info(
-                    f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
-                )
-                return OptionContractSnapshot.from_dict(response.json().get("results"))
-            except httpx.ConnectTimeout:
-                logger.error(
-                    "Connect timeout fetching snapshot | underlying_asset=%s, "
-                    "option_ticker_name=%s, timeout=%s, url=%s",
-                    underlying_asset,
-                    option_ticker_name,
-                    timeout,
-                    url,
-                )
-                return None
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code == NOT_FOUND_STATUS_CODE:
-                    logger.warning(
-                        f"Option not found or expired: {underlying_asset}/{option_ticker_name}"
-                        f"(URL: {url})"
-                    )
-                    return None
+        connect_timeout = kwargs.get("connect_timeout", SNAPSHOT_FETCH_CONNECT_TIMEOUT)
+        read_timeout = kwargs.get("read_timeout", SNAPSHOT_FETCH_READ_TIMEOUT)
+        timeout = httpx.Timeout(connect=connect_timeout, read=read_timeout, write=read_timeout)
 
-                logger.error(
-                    "HTTP error %s: %s | underlying_asset=%s, option_ticker_name=%s, url=%s",
-                    exc.response.status_code,
-                    exc.response.text,
-                    underlying_asset,
-                    option_ticker_name,
-                    url,
+        if client is None:
+            async with _build_snapshot_async_client(timeout=timeout) as request_client:
+                return await self._fetch_snapshot_with_client(
+                    request_client=request_client,
+                    underlying_asset=underlying_asset,
+                    option_ticker_name=option_ticker_name,
+                    url=url,
+                    connect_timeout=connect_timeout,
+                )
+
+        return await self._fetch_snapshot_with_client(
+            request_client=client,
+            underlying_asset=underlying_asset,
+            option_ticker_name=option_ticker_name,
+            url=url,
+            connect_timeout=connect_timeout,
+        )
+
+    async def _fetch_snapshot_with_client(
+        self,
+        request_client: httpx.AsyncClient,
+        underlying_asset: str,
+        option_ticker_name: str,
+        url: str,
+        connect_timeout: float,
+    ) -> OptionContractSnapshot | None:
+        try:
+            response = await request_client.get(url)
+            response.raise_for_status()
+            logger.info(
+                f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
+            )
+            return OptionContractSnapshot.from_dict(response.json().get("results"))
+        except httpx.ConnectTimeout:
+            logger.error(
+                "Connect timeout fetching snapshot | underlying_asset=%s, "
+                "option_ticker_name=%s, timeout=%s, url=%s",
+                underlying_asset,
+                option_ticker_name,
+                connect_timeout,
+                url,
+            )
+            return None
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == NOT_FOUND_STATUS_CODE:
+                logger.warning(
+                    f"Option not found or expired: {underlying_asset}/{option_ticker_name}"
+                    f"(URL: {url})"
                 )
                 return None
-            except httpx.RequestError as exc:
-                logger.error(
-                    "Request error fetching snapshot: %s | underlying_asset=%s, "
-                    "option_ticker_name=%s, url=%s",
-                    type(exc).__name__,
-                    underlying_asset,
-                    option_ticker_name,
-                    url,
-                )
-                return None
+
+            logger.error(
+                "HTTP error %s: %s | underlying_asset=%s, option_ticker_name=%s, url=%s",
+                exc.response.status_code,
+                exc.response.text,
+                underlying_asset,
+                option_ticker_name,
+                url,
+            )
+            return None
+        except httpx.RequestError as exc:
+            logger.error(
+                "Request error fetching snapshot: %s | underlying_asset=%s, "
+                "option_ticker_name=%s, url=%s",
+                type(exc).__name__,
+                underlying_asset,
+                option_ticker_name,
+                url,
+            )
+            return None
 
 
 def get_contract_within_price_range(
@@ -148,14 +187,32 @@ async def fetch_snapshots_batch(
     contracts: list["Options"], *args, **kwargs
 ) -> list[OptionContractSnapshot]:
     option_fetcher = Fetcher(None)
-    tasks = [
-        option_fetcher.fetch_daily_snapshot_async(
-            contract.underlying_ticker, contract.ticker, *args, **kwargs
-        )
-        for contract in contracts
-    ]
-    results = await asyncio.gather(*tasks)
-    return [snapshot for snapshot in results if snapshot is not None]
+    timeout = httpx.Timeout(
+        connect=kwargs.get("connect_timeout", SNAPSHOT_FETCH_CONNECT_TIMEOUT),
+        read=kwargs.get("read_timeout", SNAPSHOT_FETCH_READ_TIMEOUT),
+        write=kwargs.get("read_timeout", SNAPSHOT_FETCH_READ_TIMEOUT),
+    )
+    async with _build_snapshot_async_client(timeout=timeout) as client:
+        tasks = [
+            option_fetcher.fetch_daily_snapshot_async(
+                contract.underlying_ticker,
+                contract.ticker,
+                *args,
+                client=client,
+                **kwargs,
+            )
+            for contract in contracts
+        ]
+        results = await asyncio.gather(*tasks)
+        return [snapshot for snapshot in results if snapshot is not None]
+
+
+def _build_snapshot_async_client(timeout: httpx.Timeout) -> httpx.AsyncClient:
+    limits = httpx.Limits(
+        max_connections=SNAPSHOT_HTTP_MAX_CONNECTIONS,
+        max_keepalive_connections=SNAPSHOT_HTTP_MAX_KEEPALIVE_CONNECTIONS,
+    )
+    return httpx.AsyncClient(timeout=timeout, limits=limits)
 
 
 __all__ = ["Fetcher", "get_contract_within_price_range", "fetch_snapshots_batch"]
