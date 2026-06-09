@@ -4,13 +4,8 @@
 [![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=jingyi-zhao-01_strategy-tester&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=jingyi-zhao-01_strategy-tester)
 
 
-
-[option-snapshot-2025-08-08](https://jingyizhao01.grafana.net/dashboard/snapshot/476JMs1Vm2OOrRy1p9HmXNirI61ByhY9)
-<img width="2603" height="1628" alt="image" src="https://github.com/user-attachments/assets/b131b7f5-0d40-4362-abd0-00263c3aab40" />
-
-
-- Visualization of Option Chain in 4 dimensions for an underlying_asset (strike-price, OpenInterest, expiration-date, updated time) so you know how it evolves overtime
-<img width="3726" height="1813" alt="image" src="https://github.com/user-attachments/assets/4a3c2231-ade5-45ec-850e-a97e217ed524" />
+- Volatility Surface
+<iframe src="https://jingyizhao01.grafana.net/d-solo/jirsvqz/option-overview?orgId=1&from=1775026800000&to=1782889199999&timezone=browser&var-underlying_asset=CRWV&var-snapshot=1779517800757&var-oi_min=1000&var-oi_max=100000&panelId=panel-22" width="450" height="200" frameborder="0"></iframe>
 
 ## Ingestion Microservices
 
