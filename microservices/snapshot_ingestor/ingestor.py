@@ -75,7 +75,9 @@ class OptionSnapshotsIngestor(OptionIngestor):
                 f"Total contracts processed: {total_contracts}"
             )
         except httpx.ConnectTimeout:
-            logger.exception("Option snapshots ingestion aborted due to Polygon connect timeout")
+            logger.exception(
+                "Option snapshots ingestion aborted due to Polygon connect timeout"
+            )
             raise
         except httpx.RequestError as exc:
             logger.exception(
@@ -84,7 +86,11 @@ class OptionSnapshotsIngestor(OptionIngestor):
             )
             raise
         except Exception as e:
-            logger.exception("Error during option snapshots ingestion: %s", e)
+            logger.exception(
+                "Error during option snapshots ingestion (%s): %r",
+                type(e).__name__,
+                e,
+            )
             raise
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)

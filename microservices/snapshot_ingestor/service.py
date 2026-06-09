@@ -49,6 +49,10 @@ def run() -> None:
     try:
         logger.info("-----------Starting option snapshots ingestion...")
         asyncio.run(_run_job(ingestor=ingestor))
+    except Exception:
+        logger.exception("Option snapshots ingestion failed")
+        raise
+    else:
         logger.info("Option snapshots ingestion completed successfully")
     finally:
         shutdown_tracing()
