@@ -21,6 +21,7 @@ from prisma.models import Options
 logger = logging.getLogger(__name__)
 DB_RETRY_MAX_ATTEMPTS = int(os.getenv("INGEST_DB_RETRY_MAX_ATTEMPTS", "3"))
 DB_RETRY_BASE_DELAY_SECONDS = float(os.getenv("INGEST_DB_RETRY_BASE_DELAY_SECONDS", "0.5"))
+DB_WRITE_BATCH_SIZE = int(os.getenv("INGEST_DB_WRITE_BATCH_SIZE", "25"))
 
 
 class OptionIngestor:
@@ -50,9 +51,20 @@ class OptionIngestor:
                 logger.warning("No UnExpired contracts found for %s", underlying_asset)
                 continue
 
-            await asyncio.gather(
-                *[self._upsert_option_contract(contract) for contract in contracts]
-            )
+            total_batches = 0
+            for total_batches, contracts_batch in enumerate(
+                _iter_contract_batches(contracts, DB_WRITE_BATCH_SIZE),
+                start=1,
+            ):
+                logger.info(
+                    "Processing contract batch %s for %s with %s contracts",
+                    total_batches,
+                    underlying_asset,
+                    len(contracts_batch),
+                )
+                await asyncio.gather(
+                    *[self._upsert_option_contract(contract) for contract in contracts_batch]
+                )
             logger.info("All contracts for %s processed successfully", underlying_asset)
 
     async def _retrieve_all_option_contracts(self) -> list["Options"]:
@@ -133,6 +145,16 @@ class OptionIngestor:
                 await asyncio.sleep(delay)
 
         raise RuntimeError(f"Unreachable retry loop for contract {contract.ticker}")
+
+
+def _iter_contract_batches(
+    contracts: list[OptionsContract], batch_size: int
+) -> list[list[OptionsContract]]:
+    normalized_batch_size = max(1, batch_size)
+    return [
+        contracts[index : index + normalized_batch_size]
+        for index in range(0, len(contracts), normalized_batch_size)
+    ]
 
 
 __all__ = ["OptionIngestor"]
