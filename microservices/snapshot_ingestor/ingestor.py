@@ -50,12 +50,11 @@ class OptionSnapshotsIngestor(OptionIngestor):
                     len(valid_contract_snapshots),
                     len(contracts_batch),
                 )
-                await asyncio.gather(
-                    *[
-                        self._upsert_option_snapshot(contract.ticker, snapshot)
-                        for contract, snapshot in valid_contract_snapshots
-                    ]
-                )
+                tasks = [
+                    asyncio.create_task(self._upsert_option_snapshot(contract.ticker, snapshot))
+                    for contract, snapshot in valid_contract_snapshots
+                ]
+                await asyncio.gather(*tasks)
             logger.info(
                 f"All option snapshots processed successfully. "
                 f"Total contracts processed: {total_contracts}"

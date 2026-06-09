@@ -62,9 +62,11 @@ class OptionIngestor:
                     underlying_asset,
                     len(contracts_batch),
                 )
-                await asyncio.gather(
-                    *[self._upsert_option_contract(contract) for contract in contracts_batch]
-                )
+                tasks = [
+                    asyncio.create_task(self._upsert_option_contract(contract))
+                    for contract in contracts_batch
+                ]
+                await asyncio.gather(*tasks)
             logger.info("All contracts for %s processed successfully", underlying_asset)
 
     async def _retrieve_all_option_contracts(self) -> list["Options"]:

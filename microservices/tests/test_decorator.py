@@ -6,8 +6,10 @@ from microservices.shared import decorator
 from microservices.shared.decorator import (
     bounded_async_sem,
     bounded_db_connection,
+    bounded_db_connection_asyncgen,
     connect_db,
     disconnect_db,
+    traced_span_asyncgen,
 )
 
 EXPECTED_MAX_CONCURRENCY = 2
@@ -74,3 +76,27 @@ async def test_bounded_db_connection_and_semaphore():
     results = await batch_task()
     assert sorted(results) == list(range(5))
     assert max_concurrent == EXPECTED_MAX_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_asyncgen_decorators_allow_early_close_without_error():
+    yielded = []
+    closed = False
+
+    @traced_span_asyncgen(name="test_asyncgen")
+    @bounded_db_connection_asyncgen
+    async def sample_generator():
+        nonlocal closed
+        try:
+            yield 1
+            yield 2
+        finally:
+            closed = True
+
+    iterator = sample_generator()
+    first = await anext(iterator)
+    yielded.append(first)
+    await iterator.aclose()
+
+    assert yielded == [1]
+    assert closed is True

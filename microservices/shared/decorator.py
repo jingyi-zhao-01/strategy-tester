@@ -51,10 +51,16 @@ def bounded_db_connection(func):
 
 def bounded_db_connection_asyncgen(func):
     async def wrapper(*args, **kwargs):
-        async for item in func(*args, **kwargs):
-            async with _db_semaphore:
-                _log_connection_pool_stats()
-                yield item
+        iterator = func(*args, **kwargs)
+        try:
+            async for item in iterator:
+                async with _db_semaphore:
+                    _log_connection_pool_stats()
+                    yield item
+        finally:
+            aclose = getattr(iterator, "aclose", None)
+            if aclose is not None:
+                await aclose()
 
     return wrapper
 
@@ -143,18 +149,25 @@ def traced_span_asyncgen(name: str | None = None, attributes: dict | None = None
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
+            iterator = func(*args, **kwargs)
             with start_span_sync(
                 name or func.__name__,
                 kind=kind or SpanKind.INTERNAL,
                 attributes=attributes,
             ) as span:
                 try:
-                    async for item in func(*args, **kwargs):
+                    async for item in iterator:
                         yield item
-                except Exception as exc:
+                except BaseException as exc:
+                    if isinstance(exc, (GeneratorExit, asyncio.CancelledError)):
+                        raise
                     span.record_exception(exc)
                     span.set_attribute("error", True)
                     raise
+                finally:
+                    aclose = getattr(iterator, "aclose", None)
+                    if aclose is not None:
+                        await aclose()
 
         return wrapper
 
