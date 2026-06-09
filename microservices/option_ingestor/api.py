@@ -249,13 +249,21 @@ async def _fetch_snapshot_with_limit(
     **kwargs,
 ) -> OptionContractSnapshot | None:
     async with semaphore:
-        return await option_fetcher.fetch_daily_snapshot_async(
-            contract.underlying_ticker,
-            contract.ticker,
-            *args,
-            client=client,
-            **kwargs,
-        )
+        try:
+            return await option_fetcher.fetch_daily_snapshot_async(
+                contract.underlying_ticker,
+                contract.ticker,
+                *args,
+                client=client,
+                **kwargs,
+            )
+        except Exception:
+            logger.exception(
+                "Unexpected error fetching snapshot | underlying_asset=%s, option_ticker_name=%s",
+                contract.underlying_ticker,
+                contract.ticker,
+            )
+            return None
 
 
 def _iter_contract_batches(contracts: list["Options"], batch_size: int) -> list[list["Options"]]:

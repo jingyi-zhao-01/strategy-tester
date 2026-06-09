@@ -127,6 +127,45 @@ async def test_fetch_snapshots_batch_chunks_requests_and_preserves_results(monke
 
 
 @pytest.mark.asyncio
+async def test_fetch_snapshots_batch_preserves_length_on_unexpected_fetch_error(monkeypatch):
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    contracts = [
+        MagicMock(underlying_ticker="NBIS", ticker="O:NBIS1"),
+        MagicMock(underlying_ticker="NBIS", ticker="O:NBIS2"),
+    ]
+
+    class _FakeFetcher:
+        def __init__(self, _asset):
+            pass
+
+        async def fetch_daily_snapshot_async(
+            self,
+            underlying_asset,
+            option_ticker_name,
+            *args,
+            client=None,
+            **kwargs,
+        ):
+            if option_ticker_name == "O:NBIS2":
+                raise RuntimeError("bad payload")
+            return f"snapshot:{option_ticker_name}"
+
+    monkeypatch.setattr(option_api, "Fetcher", _FakeFetcher)
+    monkeypatch.setattr(option_api, "_build_snapshot_async_client", lambda timeout: _FakeClient())
+    monkeypatch.setattr(option_api, "SNAPSHOT_FETCH_BATCH_SIZE", 2)
+
+    results = await option_api.fetch_snapshots_batch(contracts)
+
+    assert results == ["snapshot:O:NBIS1", None]
+
+
+@pytest.mark.asyncio
 async def test_fetch_daily_snapshot_async_redacts_api_key_in_timeout_logs(monkeypatch, caplog):
     class _FakeClient:
         async def get(self, url):
