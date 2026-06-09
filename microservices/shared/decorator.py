@@ -6,7 +6,7 @@ from importlib import import_module
 
 from opentelemetry.trace import SpanKind
 
-from microservices.shared.observability import start_span_sync
+from microservices.shared.observability import annotate_span_error, start_span_sync
 
 CONCURRENCY_LIMIT = int(os.getenv("INGEST_CONCURRENCY_LIMIT", "200"))
 DATA_BASE_CONCURRENCY_LIMIT = int(os.getenv("INGEST_DB_CONCURRENCY_LIMIT", "10"))
@@ -111,8 +111,7 @@ def traced_span_async(name: str, attributes: dict | None = None, kind=None):
                 try:
                     return await func(*args, **kwargs)
                 except Exception as exc:
-                    span.record_exception(exc)
-                    span.set_attribute("error", True)
+                    annotate_span_error(span, exc)
                     raise
 
         return wrapper
@@ -134,8 +133,7 @@ def traced_span_sync(name: str, attributes: dict | None = None, kind=None):
                 try:
                     return func(*args, **kwargs)
                 except Exception as exc:
-                    span.record_exception(exc)
-                    span.set_attribute("error", True)
+                    annotate_span_error(span, exc)
                     raise
 
         return wrapper
@@ -161,8 +159,7 @@ def traced_span_asyncgen(name: str | None = None, attributes: dict | None = None
                 except BaseException as exc:
                     if isinstance(exc, (GeneratorExit, asyncio.CancelledError)):
                         raise
-                    span.record_exception(exc)
-                    span.set_attribute("error", True)
+                    annotate_span_error(span, exc)
                     raise
                 finally:
                     aclose = getattr(iterator, "aclose", None)

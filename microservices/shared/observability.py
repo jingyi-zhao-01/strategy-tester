@@ -11,7 +11,7 @@ from urllib.parse import parse_qsl
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import Span, SpanLimits, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.trace import SpanKind
 
@@ -53,7 +53,16 @@ def initialize_tracing(service_name: str) -> None:
         if _TRACE_READY:
             return
         resource = Resource.create({"service.name": service_name})
-        provider = TracerProvider(resource=resource)
+        provider = TracerProvider(
+            resource=resource,
+            span_limits=SpanLimits(
+                max_attributes=int(os.getenv("OTEL_SPAN_ATTRIBUTE_COUNT_LIMIT", "32")),
+                max_events=int(os.getenv("OTEL_SPAN_EVENT_COUNT_LIMIT", "8")),
+                max_attribute_length=int(
+                    os.getenv("OTEL_SPAN_ATTRIBUTE_VALUE_LENGTH_LIMIT", "256")
+                ),
+            ),
+        )
         endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
         if endpoint:
             headers = dict(
@@ -112,3 +121,11 @@ def _install_trace_filter() -> None:
     for handler in root.handlers:
         if not any(isinstance(f, TraceContextFilter) for f in handler.filters):
             handler.addFilter(TraceContextFilter())
+
+
+def annotate_span_error(span: Span, exc: BaseException) -> None:
+    span.set_attribute("error", True)
+    span.set_attribute("error.type", type(exc).__name__)
+    message = str(exc).strip()
+    if message:
+        span.set_attribute("error.message", message)
