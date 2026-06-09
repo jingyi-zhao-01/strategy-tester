@@ -1,7 +1,10 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
+from microservices.option_ingestor import api as option_api
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.shared.errors import OptionTickerNeverActiveError
 from microservices.shared.models import OptionIngestParams, OptionsContract
@@ -43,6 +46,86 @@ async def test_ingest_options_empty(monkeypatch, ingestor):
 @pytest.mark.asyncio
 async def test_ingest_option_snapshots_empty(snapshots_ingestor):
     await snapshots_ingestor.ingest_option_snapshots()
+
+
+@pytest.mark.asyncio
+async def test_fetch_snapshots_batch_chunks_requests_and_preserves_results(monkeypatch):
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    contracts = [
+        MagicMock(underlying_ticker="NBIS", ticker="O:NBIS1"),
+        MagicMock(underlying_ticker="NBIS", ticker="O:NBIS2"),
+        MagicMock(underlying_ticker="NBIS", ticker="O:NBIS3"),
+    ]
+    active = 0
+    max_active = 0
+    seen_tickers = []
+
+    class _FakeFetcher:
+        def __init__(self, _asset):
+            pass
+
+        async def fetch_daily_snapshot_async(
+            self,
+            underlying_asset,
+            option_ticker_name,
+            *args,
+            client=None,
+            **kwargs,
+        ):
+            nonlocal active, max_active
+            assert underlying_asset == "NBIS"
+            assert client is not None
+            active += 1
+            max_active = max(max_active, active)
+            seen_tickers.append(option_ticker_name)
+            await asyncio.sleep(0)
+            active -= 1
+            if option_ticker_name == "O:NBIS2":
+                return None
+            return f"snapshot:{option_ticker_name}"
+
+    monkeypatch.setattr(option_api, "Fetcher", _FakeFetcher)
+    monkeypatch.setattr(option_api, "_build_snapshot_async_client", lambda timeout: _FakeClient())
+    monkeypatch.setattr(option_api, "SNAPSHOT_FETCH_BATCH_SIZE", 2)
+    monkeypatch.setattr(option_api, "SNAPSHOT_FETCH_CONCURRENCY", 1)
+
+    results = await option_api.fetch_snapshots_batch(contracts)
+
+    assert results == [
+        "snapshot:O:NBIS1",
+        None,
+        "snapshot:O:NBIS3",
+    ]
+    assert seen_tickers == ["O:NBIS1", "O:NBIS2", "O:NBIS3"]
+    assert max_active == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_snapshot_async_redacts_api_key_in_timeout_logs(monkeypatch, caplog):
+    class _FakeClient:
+        async def get(self, url):
+            raise httpx.ConnectTimeout("timeout")
+
+    monkeypatch.setenv("POLYGON_API_KEY", "super-secret-key")
+    fetcher = option_api.Fetcher(None)
+
+    with caplog.at_level("ERROR"):
+        result = await fetcher.fetch_daily_snapshot_async(
+            "NBIS",
+            "O:NBIS260918P00080000",
+            client=_FakeClient(),
+            connect_timeout=10.0,
+        )
+
+    assert result is None
+    assert "super-secret-key" not in caplog.text
+    assert "apiKey=%5BREDACTED%5D" in caplog.text
 
 
 @pytest.mark.asyncio
