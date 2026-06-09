@@ -12,6 +12,7 @@ from microservices.shared.decorator import (
     traced_span_sync,
 )
 from microservices.shared.models import OptionContractSnapshot, OptionsContract
+from microservices.shared.observability import start_span_sync
 from microservices.shared.util import parse_option_symbol
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -122,7 +123,15 @@ class Fetcher:
             logger.info(
                 f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
             )
-            return OptionContractSnapshot.from_dict(response.json().get("results"))
+            with start_span_sync(
+                "transform_snapshot_response",
+                attributes={
+                    "module": "TRANSFORM",
+                    "underlying_asset": underlying_asset,
+                    "option_ticker_name": option_ticker_name,
+                },
+            ):
+                return OptionContractSnapshot.from_dict(response.json().get("results"))
         except httpx.ConnectTimeout:
             logger.error(
                 "Connect timeout fetching snapshot | underlying_asset=%s, "

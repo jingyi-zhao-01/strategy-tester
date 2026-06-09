@@ -15,6 +15,7 @@ from microservices.shared.decorator import (
 )
 from microservices.shared.errors import is_retryable_db_error
 from microservices.shared.models import OptionIngestParams, OptionsContract
+from microservices.shared.observability import start_span_sync
 from microservices.shared.util import get_current_datetime, option_expiration_date_to_datetime
 from prisma.models import Options
 
@@ -45,7 +46,16 @@ class OptionIngestor:
             calls = core.get_call_contracts()
             puts = core.get_put_contracts()
 
-            contracts = calls + puts
+            with start_span_sync(
+                "transform_option_contracts",
+                attributes={
+                    "module": "TRANSFORM",
+                    "underlying_asset": underlying_asset,
+                    "call_contract_count": len(calls),
+                    "put_contract_count": len(puts),
+                },
+            ):
+                contracts = calls + puts
             logger.info("Total contracts found for %s: %s", underlying_asset, len(contracts))
             if not contracts:
                 logger.warning("No UnExpired contracts found for %s", underlying_asset)
@@ -89,7 +99,34 @@ class OptionIngestor:
         base_delay_seconds: float = DB_RETRY_BASE_DELAY_SECONDS,
     ) -> "Options":
         """Upsert a single option contract into the database."""
-        expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
+        with start_span_sync(
+            "transform_option_contract_payload",
+            attributes={
+                "module": "TRANSFORM",
+                "option_ticker_name": str(contract.ticker),
+                "underlying_asset": str(contract.underlying_ticker),
+            },
+        ):
+            expiration_dt = option_expiration_date_to_datetime(str(contract.expiration_date))
+            payload = {
+                "create": {
+                    "ticker": str(contract.ticker),
+                    "underlying_ticker": str(contract.underlying_ticker),
+                    "strike_price": (
+                        float(contract.strike_price) if contract.strike_price is not None else 0.0
+                    ),
+                    "expiration_date": expiration_dt,
+                    "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
+                },
+                "update": {
+                    "underlying_ticker": str(contract.underlying_ticker),
+                    "strike_price": (
+                        float(contract.strike_price) if contract.strike_price is not None else 0.0
+                    ),
+                    "expiration_date": expiration_dt,
+                    "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
+                },
+            }
         for attempt in range(1, max_retries + 1):
             try:
                 logger.info(
@@ -102,29 +139,7 @@ class OptionIngestor:
                 options = import_module("prisma.models").Options  # type: ignore
                 return await options.prisma().upsert(
                     where={"ticker": str(contract.ticker)},
-                    data={
-                        "create": {
-                            "ticker": str(contract.ticker),
-                            "underlying_ticker": str(contract.underlying_ticker),
-                            "strike_price": (
-                                float(contract.strike_price)
-                                if contract.strike_price is not None
-                                else 0.0
-                            ),
-                            "expiration_date": expiration_dt,
-                            "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
-                        },
-                        "update": {
-                            "underlying_ticker": str(contract.underlying_ticker),
-                            "strike_price": (
-                                float(contract.strike_price)
-                                if contract.strike_price is not None
-                                else 0.0
-                            ),
-                            "expiration_date": expiration_dt,
-                            "contract_type": "CALL" if contract.contract_type == "call" else "PUT",
-                        },
-                    },
+                    data=payload,
                 )
             except Exception as e:
                 logger.exception(

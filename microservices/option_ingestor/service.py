@@ -12,7 +12,11 @@ from microservices.config import (
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.option_ingestor.retriever import OptionRetriever
 from microservices.shared import connect_db, disconnect_db
-from microservices.shared.observability import configure_service_logger, initialize_tracing
+from microservices.shared.observability import (
+    configure_service_logger,
+    initialize_tracing,
+    shutdown_tracing,
+)
 
 
 def _configure_logging(service_name: str) -> None:
@@ -48,6 +52,9 @@ def run() -> None:
     ingestor = OptionIngestor(option_retriever=retriever)
     targets = get_option_targets_from_env()
 
-    logger.info("-----------Starting option contracts ingestion...")
-    asyncio.run(_run_job(ingestor=ingestor, targets=targets))
-    logger.info("Option contracts ingestion completed successfully")
+    try:
+        logger.info("-----------Starting option contracts ingestion...")
+        asyncio.run(_run_job(ingestor=ingestor, targets=targets))
+        logger.info("Option contracts ingestion completed successfully")
+    finally:
+        shutdown_tracing()

@@ -17,6 +17,7 @@ from microservices.shared.decorator import (
 )
 from microservices.shared.errors import OptionTickerNeverActiveError, is_retryable_db_error
 from microservices.shared.models import OptionContractSnapshot
+from microservices.shared.observability import start_span_sync
 from microservices.shared.util import format_snapshot, ns_to_datetime
 from prisma import Json
 from prisma.errors import ClientNotConnectedError, UniqueViolationError
@@ -40,11 +41,19 @@ class OptionSnapshotsIngestor(OptionIngestor):
                 logger.info("Processing batch of %s contracts...", len(contracts_batch))
                 total_contracts += len(contracts_batch)
                 snapshots = await fetch_snapshots_batch(contracts_batch)
-                valid_contract_snapshots = [
-                    (contract, snapshot)
-                    for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
-                    if snapshot is not None
-                ]
+                with start_span_sync(
+                    "transform_snapshot_batch",
+                    attributes={
+                        "module": "TRANSFORM",
+                        "contract_batch_size": len(contracts_batch),
+                        "snapshot_result_count": len(snapshots),
+                    },
+                ):
+                    valid_contract_snapshots = [
+                        (contract, snapshot)
+                        for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
+                        if snapshot is not None
+                    ]
                 logger.info(
                     "Fetched %s/%s snapshots successfully for current batch",
                     len(valid_contract_snapshots),
@@ -83,7 +92,14 @@ class OptionSnapshotsIngestor(OptionIngestor):
         last_updated_dt = ns_to_datetime(last_updated_raw) if last_updated_raw else None
         curr_datetime = self.ingest_time
         attempt = 0
-        greeks = _snapshot_greeks_json(snapshot)
+        with start_span_sync(
+            "transform_snapshot_payload",
+            attributes={
+                "module": "TRANSFORM",
+                "option_ticker_name": contract_ticker,
+            },
+        ):
+            greeks = _snapshot_greeks_json(snapshot)
 
         while attempt < max_retries:
             try:

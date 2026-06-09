@@ -75,6 +75,17 @@ def initialize_tracing(service_name: str) -> None:
         _TRACE_READY = True
 
 
+def shutdown_tracing() -> None:
+    provider = trace.get_tracer_provider()
+    force_flush = getattr(provider, "force_flush", None)
+    if callable(force_flush):
+        force_flush()
+
+    shutdown = getattr(provider, "shutdown", None)
+    if callable(shutdown):
+        shutdown()
+
+
 def start_span(
     name: str,
     *,

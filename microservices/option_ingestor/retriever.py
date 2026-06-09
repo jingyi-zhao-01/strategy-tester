@@ -8,8 +8,8 @@ from microservices.shared.decorator import (
     OPTION_BATCH_RETRIEVAL_SIZE,
     bounded_db_connection,
     bounded_db_connection_asyncgen,
-    traced_span_asyncgen,
 )
+from microservices.shared.observability import start_span_sync
 
 if TYPE_CHECKING:  # pragma: no cover
     from prisma.models import Options  # type: ignore
@@ -48,7 +48,6 @@ class OptionRetriever:
             logger.exception("Error fetching option contracts: %s", e)
             return []
 
-    @traced_span_asyncgen(name="stream_retrieve_active", attributes={"module": "NEON"})
     @bounded_db_connection_asyncgen
     async def stream_retrieve_active(
         self, *args, **kwargs
@@ -60,11 +59,19 @@ class OptionRetriever:
             )
             offset = 0
             while True:
-                batch = await options_model.prisma().find_many(
-                    skip=offset,
-                    take=self.batch_size,
-                    where={"expiration_date": {"gte": self.ingest_time}},
-                )
+                with start_span_sync(
+                    "retrieve_active_batch",
+                    attributes={
+                        "module": "NEON",
+                        "batch.offset": offset,
+                        "batch.size": self.batch_size,
+                    },
+                ):
+                    batch = await options_model.prisma().find_many(
+                        skip=offset,
+                        take=self.batch_size,
+                        where={"expiration_date": {"gte": self.ingest_time}},
+                    )
                 if not batch:
                     break
                 logger.info("Retrieved batch at offset %s for session %s", offset, self.ingest_time)

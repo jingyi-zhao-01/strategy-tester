@@ -6,7 +6,11 @@ import logging
 from microservices.config import get_retriever_config, get_snapshot_runtime_config, load_env
 from microservices.option_ingestor.retriever import OptionRetriever
 from microservices.shared import connect_db, disconnect_db
-from microservices.shared.observability import configure_service_logger, initialize_tracing
+from microservices.shared.observability import (
+    configure_service_logger,
+    initialize_tracing,
+    shutdown_tracing,
+)
 from microservices.snapshot_ingestor.ingestor import OptionSnapshotsIngestor
 
 
@@ -42,6 +46,9 @@ def run() -> None:
     )
     ingestor = OptionSnapshotsIngestor(option_retriever=retriever)
 
-    logger.info("-----------Starting option snapshots ingestion...")
-    asyncio.run(_run_job(ingestor=ingestor))
-    logger.info("Option snapshots ingestion completed successfully")
+    try:
+        logger.info("-----------Starting option snapshots ingestion...")
+        asyncio.run(_run_job(ingestor=ingestor))
+        logger.info("Option snapshots ingestion completed successfully")
+    finally:
+        shutdown_tracing()
