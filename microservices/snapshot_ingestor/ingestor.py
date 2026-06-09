@@ -49,9 +49,15 @@ class OptionSnapshotsIngestor(OptionIngestor):
                         "snapshot_result_count": len(snapshots),
                     },
                 ):
+                    if len(snapshots) != len(contracts_batch):
+                        raise RuntimeError(
+                            "Snapshot fetch result count mismatch: "
+                            f"contracts_batch_size={len(contracts_batch)} "
+                            f"snapshot_result_count={len(snapshots)}"
+                        )
                     valid_contract_snapshots = [
                         (contract, snapshot)
-                        for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
+                        for contract, snapshot in zip(contracts_batch, snapshots)
                         if snapshot is not None
                     ]
                 logger.info(
@@ -69,14 +75,17 @@ class OptionSnapshotsIngestor(OptionIngestor):
                 f"Total contracts processed: {total_contracts}"
             )
         except httpx.ConnectTimeout:
-            logger.error("Option snapshots ingestion aborted due to Polygon connect timeout")
+            logger.exception("Option snapshots ingestion aborted due to Polygon connect timeout")
+            raise
         except httpx.RequestError as exc:
-            logger.error(
+            logger.exception(
                 "Option snapshots ingestion aborted due to network request error: %s",
                 type(exc).__name__,
             )
+            raise
         except Exception as e:
-            logger.error("Error during option snapshots ingestion: %s", e)
+            logger.exception("Error during option snapshots ingestion: %s", e)
+            raise
 
     @bounded_async_sem(limit=DATA_BASE_CONCURRENCY_LIMIT)
     @traced_span_async(name="_upsert_option_snapshot", attributes={"module": "DB"})

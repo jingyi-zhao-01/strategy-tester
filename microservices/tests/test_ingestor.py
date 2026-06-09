@@ -49,6 +49,26 @@ async def test_ingest_option_snapshots_empty(snapshots_ingestor):
 
 
 @pytest.mark.asyncio
+async def test_ingest_option_snapshots_raises_on_snapshot_count_mismatch(
+    monkeypatch, snapshots_ingestor
+):
+    contract_a = MagicMock(ticker="O:TST1")
+    contract_b = MagicMock(ticker="O:TST2")
+
+    async def contract_batches():
+        yield [contract_a, contract_b]
+
+    snapshots_ingestor.option_retriever.stream_retrieve_active = contract_batches
+    monkeypatch.setattr(
+        "microservices.snapshot_ingestor.ingestor.fetch_snapshots_batch",
+        AsyncMock(return_value=[MagicMock()]),
+    )
+
+    with pytest.raises(RuntimeError, match="Snapshot fetch result count mismatch"):
+        await snapshots_ingestor.ingest_option_snapshots()
+
+
+@pytest.mark.asyncio
 async def test_fetch_snapshots_batch_chunks_requests_and_preserves_results(monkeypatch):
     class _FakeClient:
         async def __aenter__(self):
