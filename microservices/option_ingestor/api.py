@@ -182,10 +182,9 @@ def get_contract_within_price_range(
     ]
 
 
-@bounded_async_sem(limit=SNAPSHOT_FETCH_CONCURRENCY)
 async def fetch_snapshots_batch(
     contracts: list["Options"], *args, **kwargs
-) -> list[OptionContractSnapshot]:
+) -> list[OptionContractSnapshot | None]:
     option_fetcher = Fetcher(None)
     timeout = httpx.Timeout(
         connect=kwargs.get("connect_timeout", SNAPSHOT_FETCH_CONNECT_TIMEOUT),
@@ -194,17 +193,17 @@ async def fetch_snapshots_batch(
     )
     async with _build_snapshot_async_client(timeout=timeout) as client:
         tasks = [
-            option_fetcher.fetch_daily_snapshot_async(
-                contract.underlying_ticker,
-                contract.ticker,
-                *args,
+            _fetch_snapshot_with_limit(
+                option_fetcher=option_fetcher,
+                contract=contract,
                 client=client,
+                *args,
                 **kwargs,
             )
             for contract in contracts
         ]
         results = await asyncio.gather(*tasks)
-        return [snapshot for snapshot in results if snapshot is not None]
+        return list(results)
 
 
 def _build_snapshot_async_client(timeout: httpx.Timeout) -> httpx.AsyncClient:
@@ -213,6 +212,23 @@ def _build_snapshot_async_client(timeout: httpx.Timeout) -> httpx.AsyncClient:
         max_keepalive_connections=SNAPSHOT_HTTP_MAX_KEEPALIVE_CONNECTIONS,
     )
     return httpx.AsyncClient(timeout=timeout, limits=limits)
+
+
+@bounded_async_sem(limit=SNAPSHOT_FETCH_CONCURRENCY)
+async def _fetch_snapshot_with_limit(
+    option_fetcher: Fetcher,
+    contract: "Options",
+    *args,
+    client: httpx.AsyncClient,
+    **kwargs,
+) -> OptionContractSnapshot | None:
+    return await option_fetcher.fetch_daily_snapshot_async(
+        contract.underlying_ticker,
+        contract.ticker,
+        *args,
+        client=client,
+        **kwargs,
+    )
 
 
 __all__ = ["Fetcher", "get_contract_within_price_range", "fetch_snapshots_batch"]

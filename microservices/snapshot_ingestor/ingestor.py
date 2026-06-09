@@ -40,10 +40,20 @@ class OptionSnapshotsIngestor(OptionIngestor):
                 logger.info("Processing batch of %s contracts...", len(contracts_batch))
                 total_contracts += len(contracts_batch)
                 snapshots = await fetch_snapshots_batch(contracts_batch)
+                valid_contract_snapshots = [
+                    (contract, snapshot)
+                    for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
+                    if snapshot is not None
+                ]
+                logger.info(
+                    "Fetched %s/%s snapshots successfully for current batch",
+                    len(valid_contract_snapshots),
+                    len(contracts_batch),
+                )
                 await asyncio.gather(
                     *[
                         self._upsert_option_snapshot(contract.ticker, snapshot)
-                        for contract, snapshot in zip(contracts_batch, snapshots, strict=True)
+                        for contract, snapshot in valid_contract_snapshots
                     ]
                 )
             logger.info(
