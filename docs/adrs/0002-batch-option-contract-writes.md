@@ -45,6 +45,15 @@ A new runtime knob is introduced:
 
 This controls how many write coroutines are created per batch for one underlying.
 
+## Sequence Diagram
+
+This diagram highlights the behavioral change from one large write burst to bounded sequential batches.
+
+- red box: previous full-list fan-out
+- green box: current batched write pattern
+
+![ADR 0002 batch option contract writes sequence](./diagrams/0002-batch-option-contract-writes-sequence.svg)
+
 ## Consequences
 
 Expected benefits:

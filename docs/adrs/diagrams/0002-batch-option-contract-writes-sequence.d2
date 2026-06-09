@@ -1,0 +1,43 @@
+direction: down
+
+before_after_batching: {
+  label: "Option contract ingestion: full fan-out vs batched writes"
+  shape: sequence_diagram
+
+  scheduler: "CronJob"
+  ingestor: "option-ingestor"
+  polygon: "Massive / Polygon"
+  db: "Neon / Prisma"
+
+  old_flow: {
+    label: "before: single full-list fan-out"
+    style.fill: "#FEF2F2"
+    style.stroke: "#DC2626"
+
+    scheduler -> ingestor: "1. start ingestion run"
+    ingestor -> polygon: "2. fetch contracts for one underlying"
+    polygon -> ingestor: "3. return full contract list"
+    ingestor -> ingestor: "4. build one asyncio.gather over all contracts"
+    ingestor -> db: "5. fan out many concurrent upsert attempts"
+    db -> ingestor: "6. accept / fail requests under burst pressure"
+    ingestor -> scheduler: "7. run succeeds or fails after partial progress"
+  }
+
+  new_flow: {
+    label: "after: bounded sequential batches"
+    style.fill: "#DCFCE7"
+    style.stroke: "#16A34A"
+
+    scheduler -> ingestor: "8. start ingestion run"
+    ingestor -> polygon: "9. fetch contracts for one underlying"
+    polygon -> ingestor: "10. return full contract list"
+    ingestor -> ingestor: "11. split contracts into bounded batches"
+    ingestor -> ingestor: "12. launch gather for batch 1 only"
+    ingestor -> db: "13. upsert bounded subset of contracts"
+    db -> ingestor: "14. batch 1 completes"
+    ingestor -> ingestor: "15. launch gather for batch 2"
+    ingestor -> db: "16. upsert next bounded subset"
+    db -> ingestor: "17. later batches complete in sequence"
+    ingestor -> scheduler: "18. finish with lower burst pressure"
+  }
+}
