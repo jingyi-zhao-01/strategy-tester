@@ -3,7 +3,7 @@
 import logging
 import os
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from contextvars import ContextVar
 from threading import Lock
 from urllib.parse import parse_qsl
@@ -100,9 +100,14 @@ def start_span(
     *,
     kind: SpanKind = SpanKind.INTERNAL,
     attributes: Mapping[str, object] | None = None,
-) -> Iterator[trace.Span]:
+) -> AbstractContextManager[trace.Span]:
     tracer = trace.get_tracer(_TRACER_NAME)
-    return tracer.start_as_current_span(name, kind=kind, attributes=attributes)
+    return tracer.start_as_current_span(
+        name,
+        kind=kind,
+        attributes=attributes,
+        record_exception=False,
+    )
 
 
 @contextmanager
