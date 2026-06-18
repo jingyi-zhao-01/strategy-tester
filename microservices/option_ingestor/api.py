@@ -28,6 +28,10 @@ SNAPSHOT_HTTP_MAX_CONNECTIONS = int(os.getenv("SNAPSHOT_HTTP_MAX_CONNECTIONS", "
 SNAPSHOT_HTTP_MAX_KEEPALIVE_CONNECTIONS = int(
     os.getenv("SNAPSHOT_HTTP_MAX_KEEPALIVE_CONNECTIONS", "20")
 )
+SNAPSHOT_FETCH_RETRY_MAX_ATTEMPTS = int(os.getenv("SNAPSHOT_FETCH_RETRY_MAX_ATTEMPTS", "3"))
+SNAPSHOT_FETCH_RETRY_BASE_DELAY_SECONDS = float(
+    os.getenv("SNAPSHOT_FETCH_RETRY_BASE_DELAY_SECONDS", "0.5")
+)
 logger = logging.getLogger(__name__)
 
 
@@ -86,89 +90,113 @@ class Fetcher:
             write=read_timeout,
             pool=read_timeout,
         )
+        max_retries = kwargs.get("max_retries", SNAPSHOT_FETCH_RETRY_MAX_ATTEMPTS)
+        base_delay_seconds = kwargs.get(
+            "base_delay_seconds", SNAPSHOT_FETCH_RETRY_BASE_DELAY_SECONDS
+        )
         sanitized_url = _redact_url_query_param(url, "apiKey")
+        request_metadata = {
+            "underlying_asset": underlying_asset,
+            "option_ticker_name": option_ticker_name,
+            "url": url,
+            "sanitized_url": sanitized_url,
+            "connect_timeout": connect_timeout,
+            "read_timeout": read_timeout,
+        }
 
         if client is None:
             async with _build_snapshot_async_client(timeout=timeout) as request_client:
                 return await self._fetch_snapshot_with_client(
                     request_client=request_client,
-                    underlying_asset=underlying_asset,
-                    option_ticker_name=option_ticker_name,
-                    url=url,
-                    sanitized_url=sanitized_url,
-                    connect_timeout=connect_timeout,
+                    request_metadata=request_metadata,
+                    max_retries=max_retries,
+                    base_delay_seconds=base_delay_seconds,
                 )
 
         return await self._fetch_snapshot_with_client(
             request_client=client,
-            underlying_asset=underlying_asset,
-            option_ticker_name=option_ticker_name,
-            url=url,
-            sanitized_url=sanitized_url,
-            connect_timeout=connect_timeout,
+            request_metadata=request_metadata,
+            max_retries=max_retries,
+            base_delay_seconds=base_delay_seconds,
         )
 
     async def _fetch_snapshot_with_client(
         self,
         request_client: httpx.AsyncClient,
-        underlying_asset: str,
-        option_ticker_name: str,
-        url: str,
-        sanitized_url: str,
-        connect_timeout: float,
+        request_metadata: dict[str, str | float],
+        max_retries: int,
+        base_delay_seconds: float,
     ) -> OptionContractSnapshot | None:
-        try:
-            response = await request_client.get(url)
-            response.raise_for_status()
-            logger.info(
-                f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
-            )
-            with start_span_sync(
-                "transform_snapshot_response",
-                attributes={
-                    "module": "TRANSFORM",
-                    "underlying_asset": underlying_asset,
-                    "option_ticker_name": option_ticker_name,
-                },
-            ):
-                return OptionContractSnapshot.from_dict(response.json().get("results"))
-        except httpx.ConnectTimeout:
-            logger.error(
-                "Connect timeout fetching snapshot | underlying_asset=%s, "
-                "option_ticker_name=%s, timeout=%s, url=%s",
-                underlying_asset,
-                option_ticker_name,
-                connect_timeout,
-                sanitized_url,
-            )
-            return None
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == NOT_FOUND_STATUS_CODE:
-                logger.warning(
-                    f"Option not found or expired: {underlying_asset}/{option_ticker_name}"
-                    f"(URL: {sanitized_url})"
+        underlying_asset = str(request_metadata["underlying_asset"])
+        option_ticker_name = str(request_metadata["option_ticker_name"])
+        url = str(request_metadata["url"])
+        sanitized_url = str(request_metadata["sanitized_url"])
+        connect_timeout = float(request_metadata["connect_timeout"])
+        read_timeout = float(request_metadata["read_timeout"])
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = await request_client.get(url)
+                response.raise_for_status()
+                logger.info(
+                    f"Fetched snapshot for {underlying_asset}/{option_ticker_name} successfully."
+                )
+                with start_span_sync(
+                    "transform_snapshot_response",
+                    attributes={
+                        "module": "TRANSFORM",
+                        "underlying_asset": underlying_asset,
+                        "option_ticker_name": option_ticker_name,
+                    },
+                ):
+                    return OptionContractSnapshot.from_dict(response.json().get("results"))
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == NOT_FOUND_STATUS_CODE:
+                    logger.warning(
+                        f"Option not found or expired: {underlying_asset}/{option_ticker_name}"
+                        f"(URL: {sanitized_url})"
+                    )
+                    return None
+
+                logger.error(
+                    "HTTP error %s: %s | underlying_asset=%s, option_ticker_name=%s, url=%s",
+                    exc.response.status_code,
+                    exc.response.text,
+                    underlying_asset,
+                    option_ticker_name,
+                    sanitized_url,
                 )
                 return None
+            except httpx.RequestError as exc:
+                if not _is_retryable_snapshot_request_error(exc) or attempt >= max_retries:
+                    logger.error(
+                        "Request error fetching snapshot: %s | underlying_asset=%s, "
+                        "option_ticker_name=%s, url=%s",
+                        type(exc).__name__,
+                        underlying_asset,
+                        option_ticker_name,
+                        sanitized_url,
+                    )
+                    return None
 
-            logger.error(
-                "HTTP error %s: %s | underlying_asset=%s, option_ticker_name=%s, url=%s",
-                exc.response.status_code,
-                exc.response.text,
-                underlying_asset,
-                option_ticker_name,
-                sanitized_url,
-            )
-            return None
-        except httpx.RequestError as exc:
-            logger.error(
-                "Request error fetching snapshot: %s | underlying_asset=%s, "
-                "option_ticker_name=%s, url=%s",
-                type(exc).__name__,
-                underlying_asset,
-                option_ticker_name,
-                sanitized_url,
-            )
-            return None
+                delay = base_delay_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "Retrying snapshot fetch after transient request error: %s "
+                    "| underlying_asset=%s, option_ticker_name=%s, "
+                    "connect_timeout=%s, read_timeout=%s, delay=%.2fs, attempt=%s/%s, url=%s",
+                    type(exc).__name__,
+                    underlying_asset,
+                    option_ticker_name,
+                    connect_timeout,
+                    read_timeout,
+                    delay,
+                    attempt,
+                    max_retries,
+                    sanitized_url,
+                )
+                await asyncio.sleep(delay)
+
+        return None
 
 
 def get_contract_within_price_range(
@@ -218,11 +246,11 @@ async def fetch_snapshots_batch(
             tasks = [
                 asyncio.create_task(
                     _fetch_snapshot_with_limit(
-                        option_fetcher=option_fetcher,
-                        contract=contract,
+                        option_fetcher,
+                        contract,
+                        *args,
                         client=client,
                         semaphore=fetch_semaphore,
-                        *args,
                         **kwargs,
                     )
                 )
@@ -283,6 +311,10 @@ def _redact_url_query_param(url: str, param_name: str) -> str:
         ]
     )
     return urlunsplit((parts.scheme, parts.netloc, parts.path, sanitized_query, parts.fragment))
+
+
+def _is_retryable_snapshot_request_error(error: httpx.RequestError) -> bool:
+    return isinstance(error, httpx.ConnectTimeout | httpx.ReadTimeout)
 
 
 __all__ = ["Fetcher", "get_contract_within_price_range", "fetch_snapshots_batch"]

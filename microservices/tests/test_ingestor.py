@@ -12,6 +12,7 @@ from microservices.snapshot_ingestor.ingestor import OptionSnapshotsIngestor
 from prisma.errors import ClientNotConnectedError
 
 EXPECTED_RETRY_UPSERT_CALLS = 2
+EXPECTED_RETRY_FETCH_CALLS = 2
 
 
 @pytest.fixture
@@ -188,6 +189,95 @@ async def test_fetch_daily_snapshot_async_redacts_api_key_in_timeout_logs(monkey
     assert result is None
     assert "super-secret-key" not in caplog.text
     assert "apiKey=%5BREDACTED%5D" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_snapshot_async_retries_read_timeout(monkeypatch):
+    class _FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "results": {
+                    "break_even_price": 1.0,
+                    "day": {
+                        "change": 0.0,
+                        "change_percent": 0.0,
+                        "close": 1.0,
+                        "high": 1.0,
+                        "last_updated": 1,
+                        "low": 1.0,
+                        "open": 1.0,
+                        "previous_close": 1.0,
+                        "volume": 1,
+                        "vwap": 1.0,
+                    },
+                    "details": {"ticker": "O:NBIS260918P00080000"},
+                    "greeks": {"delta": 0.1, "gamma": 0.1, "theta": -0.1, "vega": 0.1},
+                    "implied_volatility": 0.2,
+                    "market_status": "open",
+                    "open_interest": 1,
+                    "underlying_asset": {"price": 1.0, "ticker": "NBIS"},
+                }
+            }
+
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def get(self, url):
+            self.calls += 1
+            if self.calls == 1:
+                raise httpx.ReadTimeout("timeout")
+            return _FakeResponse()
+
+    monkeypatch.setenv("POLYGON_API_KEY", "super-secret-key")
+    fetcher = option_api.Fetcher(None)
+    client = _FakeClient()
+
+    with patch("microservices.option_ingestor.api.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+        result = await fetcher.fetch_daily_snapshot_async(
+            "NBIS",
+            "O:NBIS260918P00080000",
+            client=client,
+            read_timeout=10.0,
+            max_retries=3,
+            base_delay_seconds=0.5,
+        )
+
+    assert result is not None
+    assert client.calls == EXPECTED_RETRY_FETCH_CALLS
+    mock_sleep.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_snapshot_async_does_not_retry_non_timeout_request_error(monkeypatch):
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def get(self, url):
+            self.calls += 1
+            request = httpx.Request("GET", url)
+            raise httpx.NetworkError("boom", request=request)
+
+    monkeypatch.setenv("POLYGON_API_KEY", "super-secret-key")
+    fetcher = option_api.Fetcher(None)
+    client = _FakeClient()
+
+    with patch("microservices.option_ingestor.api.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+        result = await fetcher.fetch_daily_snapshot_async(
+            "NBIS",
+            "O:NBIS260918P00080000",
+            client=client,
+            max_retries=3,
+            base_delay_seconds=0.5,
+        )
+
+    assert result is None
+    assert client.calls == 1
+    mock_sleep.assert_not_awaited()
 
 
 @pytest.mark.asyncio
