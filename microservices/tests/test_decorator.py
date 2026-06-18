@@ -1,4 +1,5 @@
 import asyncio
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -13,6 +14,7 @@ from microservices.shared.decorator import (
 )
 
 EXPECTED_MAX_CONCURRENCY = 2
+EXPECTED_RETRY_CONNECT_CALLS = 2
 
 
 class _MockPrisma:
@@ -52,6 +54,32 @@ async def test_connect_db_and_disconnect_db(monkeypatch):
 
     assert len(open_calls) == 1
     assert len(close_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_connect_db_retries_transient_error(monkeypatch):
+    open_calls = []
+
+    class TransientConnectError(Exception):
+        pass
+
+    class MockPrisma:
+        async def connect(self):
+            open_calls.append(1)
+            if len(open_calls) == 1:
+                raise TransientConnectError("P1001 Can't reach database server")
+
+        async def disconnect(self):
+            await asyncio.sleep(0)
+
+    monkeypatch.setattr("microservices.shared.decorator.db", MockPrisma())
+    monkeypatch.setattr("microservices.shared.decorator._db_connected", False)
+
+    with patch("microservices.shared.decorator.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+        await connect_db()
+
+    assert len(open_calls) == EXPECTED_RETRY_CONNECT_CALLS
+    mock_sleep.assert_awaited_once()
 
 
 @pytest.mark.asyncio

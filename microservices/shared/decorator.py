@@ -6,11 +6,14 @@ from importlib import import_module
 
 from opentelemetry.trace import SpanKind
 
+from microservices.shared.errors import is_retryable_db_error
 from microservices.shared.observability import annotate_span_error, start_span_sync
 
 CONCURRENCY_LIMIT = int(os.getenv("INGEST_CONCURRENCY_LIMIT", "200"))
 DATA_BASE_CONCURRENCY_LIMIT = int(os.getenv("INGEST_DB_CONCURRENCY_LIMIT", "10"))
 OPTION_BATCH_RETRIEVAL_SIZE = int(os.getenv("INGEST_OPTION_BATCH_SIZE", "500"))
+DB_CONNECT_MAX_ATTEMPTS = int(os.getenv("INGEST_DB_CONNECT_MAX_ATTEMPTS", "3"))
+DB_CONNECT_BASE_DELAY_SECONDS = float(os.getenv("INGEST_DB_CONNECT_BASE_DELAY_SECONDS", "0.5"))
 _db_semaphore = asyncio.Semaphore(DATA_BASE_CONCURRENCY_LIMIT)
 logger = logging.getLogger(__name__)
 
@@ -27,9 +30,26 @@ async def connect_db() -> None:
     global _db_connected  # noqa: PLW0603
     async with _db_lock:
         if not _db_connected:
-            await db.connect()
-            _db_connected = True
-            _log_connection_pool_stats()
+            for attempt in range(1, DB_CONNECT_MAX_ATTEMPTS + 1):
+                try:
+                    await db.connect()
+                    _db_connected = True
+                    _log_connection_pool_stats()
+                    return
+                except Exception as exc:
+                    if not is_retryable_db_error(exc) or attempt >= DB_CONNECT_MAX_ATTEMPTS:
+                        raise
+
+                    delay = DB_CONNECT_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+                    logger.warning(
+                        "Retrying initial database connection after transient error in %.2fs "
+                        "(attempt %s/%s): %s",
+                        delay,
+                        attempt,
+                        DB_CONNECT_MAX_ATTEMPTS,
+                        exc,
+                    )
+                    await asyncio.sleep(delay)
 
 
 async def disconnect_db() -> None:
@@ -157,7 +177,7 @@ def traced_span_asyncgen(name: str | None = None, attributes: dict | None = None
                     async for item in iterator:
                         yield item
                 except BaseException as exc:
-                    if isinstance(exc, (GeneratorExit, asyncio.CancelledError)):
+                    if isinstance(exc, GeneratorExit | asyncio.CancelledError):
                         raise
                     annotate_span_error(span, exc)
                     raise

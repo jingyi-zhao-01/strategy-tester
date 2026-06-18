@@ -20,7 +20,7 @@ from microservices.shared.models import OptionContractSnapshot
 from microservices.shared.observability import start_span_sync
 from microservices.shared.util import format_snapshot, ns_to_datetime
 from prisma import Json
-from prisma.errors import ClientNotConnectedError, UniqueViolationError
+from prisma.errors import UniqueViolationError
 from prisma.models import OptionSnapshot
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class OptionSnapshotsIngestor(OptionIngestor):
                         )
                     valid_contract_snapshots = [
                         (contract, snapshot)
-                        for contract, snapshot in zip(contracts_batch, snapshots)
+                        for contract, snapshot in zip(contracts_batch, snapshots, strict=False)
                         if snapshot is not None
                     ]
                 logger.info(
@@ -75,9 +75,7 @@ class OptionSnapshotsIngestor(OptionIngestor):
                 f"Total contracts processed: {total_contracts}"
             )
         except httpx.ConnectTimeout:
-            logger.exception(
-                "Option snapshots ingestion aborted due to Polygon connect timeout"
-            )
+            logger.exception("Option snapshots ingestion aborted due to Polygon connect timeout")
             raise
         except httpx.RequestError as exc:
             logger.exception(
@@ -239,16 +237,11 @@ def _handle_snapshot_upsert_error(
     if isinstance(error, OptionTickerNeverActiveError):
         logger.info("%s is not active", contract_ticker)
         return False
-    if isinstance(error, ClientNotConnectedError):
-        logger.error(
-            "Database connection error: %s. Retrying up to %s times...", error, max_retries
-        )
-        return next_attempt < max_retries
     if is_retryable_db_error(error):
-        logger.error(
+        logger.warning(
             "Transient database transport error for %s: %s (attempt %s/%s)",
             contract_ticker,
-            type(error).__name__,
+            error,
             next_attempt,
             max_retries,
         )
@@ -258,8 +251,6 @@ def _handle_snapshot_upsert_error(
         f"{curr_datetime} Error inserting option snapshot for "
         f"{contract_ticker}: {error} (attempt {next_attempt}/{max_retries})"
     )
-    if next_attempt < max_retries:
-        return True
 
     logger.error(traceback.format_exc())
     logger.error("Failed to insert snapshot for %s after %s attempts", contract_ticker, max_retries)
