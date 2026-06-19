@@ -63,23 +63,9 @@ def initialize_tracing(service_name: str) -> None:
                 ),
             ),
         )
-        endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-        if endpoint:
-            headers = dict(
-                parse_qsl(
-                    os.getenv("OTEL_EXPORTER_OTLP_HEADERS", ""),
-                    separator=",",
-                    keep_blank_values=True,
-                )
-            )
-            provider.add_span_processor(
-                BatchSpanProcessor(
-                    OTLPSpanExporter(
-                        endpoint=endpoint,
-                        headers=headers or None,
-                    )
-                )
-            )
+        exporter = _build_otlp_exporter()
+        if exporter is not None:
+            provider.add_span_processor(BatchSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
         _TRACE_READY = True
 
@@ -134,3 +120,36 @@ def annotate_span_error(span: Span, exc: BaseException) -> None:
     message = str(exc).strip()
     if message:
         span.set_attribute("error.message", message)
+
+
+def _build_otlp_exporter() -> OTLPSpanExporter | None:
+    protocol = os.getenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf").strip()
+    if protocol and protocol != "http/protobuf":
+        logging.getLogger(__name__).warning(
+            "Unsupported OTEL protocol=%s for strategy-tester; expected http/protobuf",
+            protocol,
+        )
+        return None
+
+    endpoint = os.getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "").strip()
+    if not endpoint:
+        endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
+    if not endpoint:
+        return None
+
+    timeout = float(os.getenv("OTEL_EXPORTER_OTLP_TIMEOUT", "10"))
+    return OTLPSpanExporter(
+        endpoint=endpoint,
+        headers=_parse_headers(os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")) or None,
+        timeout=timeout,
+    )
+
+
+def _parse_headers(raw_headers: str) -> dict[str, str]:
+    return dict(
+        parse_qsl(
+            raw_headers,
+            separator=",",
+            keep_blank_values=True,
+        )
+    )
