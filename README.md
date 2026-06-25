@@ -6,7 +6,8 @@
 ### To understand US option market out of pure interest :D 
 
 - Volatility Surface
-<img width="2055" height="1626" alt="image" src="https://github.com/user-attachments/assets/d8232485-52ea-4d95-8486-fe68b087711c" />
+<img width="3740" height="1652" alt="image" src="https://github.com/user-attachments/assets/985694fa-3a9c-4bd8-a164-c48fa098bac2" />
+
 
 - Call & PUT
 <img width="2152" height="1496" alt="image" src="https://github.com/user-attachments/assets/2b5884f8-17dc-4ee8-9230-8eb5d0a2c32d" />
