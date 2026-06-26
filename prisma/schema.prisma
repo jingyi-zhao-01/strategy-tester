@@ -40,6 +40,7 @@ model OptionSnapshot {
   day_open      Float?
   implied_vol   Float?
   last_price    Float?
+  underlying_price Float?
   last_updated  DateTime @db.Timestamptz(6)
   last_crawled  DateTime @db.Timestamptz(6)
   open_interest Int?

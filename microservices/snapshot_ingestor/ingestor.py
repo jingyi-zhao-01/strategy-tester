@@ -204,12 +204,18 @@ def _build_snapshot_upsert_payload(
     day_open = snapshot.day.open if snapshot.day is not None else None
     day_close = snapshot.day.close if snapshot.day is not None else None
     day_change = snapshot.day.change_percent if snapshot.day is not None else None
+    underlying_price = (
+        snapshot.underlying_asset.price
+        if snapshot.underlying_asset is not None
+        else None
+    )
     base_payload = {
         "open_interest": open_interest,
         "volume": volume,
         "implied_vol": snapshot.implied_volatility,
         "greeks": greeks if greeks is not None else None,
         "last_price": last_price,
+        "underlying_price": underlying_price,
         "last_updated": last_updated_dt,
         "last_crawled": curr_datetime,
         "day_open": day_open,

@@ -8,7 +8,10 @@ from microservices.option_ingestor import api as option_api
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.shared.errors import OptionTickerNeverActiveError
 from microservices.shared.models import OptionIngestParams, OptionsContract
-from microservices.snapshot_ingestor.ingestor import OptionSnapshotsIngestor
+from microservices.snapshot_ingestor.ingestor import (
+    OptionSnapshotsIngestor,
+    _build_snapshot_upsert_payload,
+)
 from prisma.errors import ClientNotConnectedError
 
 EXPECTED_RETRY_UPSERT_CALLS = 2
@@ -410,6 +413,26 @@ async def test_upsert_option_snapshot_retries_client_not_connected(snapshots_ing
         assert result == "mocked"
         assert mock_prisma.return_value.upsert.await_count == EXPECTED_RETRY_UPSERT_CALLS
         mock_sleep.assert_awaited_once()
+
+
+def test_build_snapshot_upsert_payload_includes_underlying_price():
+    snapshot = MagicMock()
+    snapshot.day = MagicMock(volume=1, close=1.0, open=0.9, change_percent=0.1)
+    snapshot.greeks = None
+    snapshot.open_interest = 1
+    snapshot.implied_volatility = 0.1
+    snapshot.underlying_asset = MagicMock(price=123.45)
+
+    payload = _build_snapshot_upsert_payload(
+        contract_ticker="TST",
+        snapshot=snapshot,
+        last_updated_dt="dt",
+        curr_datetime="now",
+        greeks=None,
+    )
+
+    assert payload["create"]["underlying_price"] == 123.45
+    assert payload["update"]["underlying_price"] == 123.45
 
 
 @pytest.mark.asyncio
