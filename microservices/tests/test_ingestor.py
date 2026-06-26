@@ -77,13 +77,21 @@ async def test_ingest_option_snapshots_uses_paginated_chain_results(
         "microservices.snapshot_ingestor.ingestor.fetch_chain_snapshots_for_underlying",
         AsyncMock(return_value=[snapshot_a, snapshot_b, snapshot_extra]),
     )
+    monkeypatch.setattr(
+        "microservices.snapshot_ingestor.ingestor.fetch_stock_spot_prices_for_underlyings",
+        AsyncMock(return_value={"TST": 123.45}),
+    )
     snapshots_ingestor._upsert_option_snapshot = AsyncMock()
 
     await snapshots_ingestor.ingest_option_snapshots()
 
     assert snapshots_ingestor._upsert_option_snapshot.await_count == 2
-    snapshots_ingestor._upsert_option_snapshot.assert_any_await("O:TST1", snapshot_a)
-    snapshots_ingestor._upsert_option_snapshot.assert_any_await("O:TST2", snapshot_b)
+    snapshots_ingestor._upsert_option_snapshot.assert_any_await(
+        "O:TST1", snapshot_a, underlying_price_override=123.45
+    )
+    snapshots_ingestor._upsert_option_snapshot.assert_any_await(
+        "O:TST2", snapshot_b, underlying_price_override=123.45
+    )
 
 
 @pytest.mark.asyncio
@@ -314,6 +322,195 @@ async def test_fetch_daily_snapshot_async_does_not_retry_non_timeout_request_err
 
 
 @pytest.mark.asyncio
+async def test_fetch_daily_snapshot_async_retries_rate_limit_with_retry_after(monkeypatch, caplog):
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def get(self, url):
+            self.calls += 1
+            request = httpx.Request("GET", url)
+            if self.calls == 1:
+                response = httpx.Response(
+                    429,
+                    request=request,
+                    headers={"Retry-After": "12"},
+                    text="rate limited",
+                )
+                raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "results": {
+                        "break_even_price": 1.0,
+                        "day": {
+                            "change": 0.0,
+                            "change_percent": 0.0,
+                            "close": 1.0,
+                            "high": 1.0,
+                            "last_updated": 1,
+                            "low": 1.0,
+                            "open": 1.0,
+                            "previous_close": 1.0,
+                            "volume": 1,
+                            "vwap": 1.0,
+                        },
+                        "details": {"ticker": "O:NBIS260918P00080000"},
+                        "greeks": {"delta": 0.1, "gamma": 0.1, "theta": -0.1, "vega": 0.1},
+                        "implied_volatility": 0.2,
+                        "market_status": "open",
+                        "open_interest": 1,
+                        "underlying_asset": {"price": 1.0, "ticker": "NBIS"},
+                    }
+                },
+            )
+
+    monkeypatch.setenv("POLYGON_API_KEY", "super-secret-key")
+    fetcher = option_api.Fetcher(None)
+    client = _FakeClient()
+
+    with (
+        patch("microservices.option_ingestor.api.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+        caplog.at_level("WARNING"),
+    ):
+        result = await fetcher.fetch_daily_snapshot_async(
+            "NBIS",
+            "O:NBIS260918P00080000",
+            client=client,
+            max_retries=3,
+        )
+
+    assert result is not None
+    assert client.calls == EXPECTED_RETRY_FETCH_CALLS
+    mock_sleep.assert_awaited_once_with(12.0)
+    assert "Polygon rate limited snapshot fetch; retrying" in caplog.text
+    assert "retry_after=12" in caplog.text
+    assert "super-secret-key" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_daily_snapshot_async_logs_rate_limit_exhausted(monkeypatch, caplog):
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def get(self, url):
+            self.calls += 1
+            request = httpx.Request("GET", url)
+            response = httpx.Response(429, request=request, text="rate limited")
+            raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+
+    monkeypatch.setenv("POLYGON_API_KEY", "super-secret-key")
+    fetcher = option_api.Fetcher(None)
+    client = _FakeClient()
+
+    with (
+        patch("microservices.option_ingestor.api.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+        caplog.at_level("WARNING"),
+    ):
+        result = await fetcher.fetch_daily_snapshot_async(
+            "NBIS",
+            "O:NBIS260918P00080000",
+            client=client,
+            max_retries=2,
+        )
+
+    assert result is None
+    assert client.calls == 2
+    mock_sleep.assert_awaited_once()
+    assert "Polygon rate limit exhausted for snapshot fetch" in caplog.text
+    assert "super-secret-key" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_stock_spot_price_uses_last_trade_price(monkeypatch):
+    class _FakeClient:
+        async def get(self, url):
+            request = httpx.Request("GET", url)
+            return httpx.Response(
+                200,
+                request=request,
+                json={
+                    "ticker": {
+                        "lastTrade": {"p": 321.09},
+                        "day": {"c": 320.0},
+                    }
+                },
+            )
+
+    monkeypatch.setenv("POLYGON_API_KEY", "super-secret-key")
+
+    price = await option_api.fetch_stock_spot_price("AMD", client=_FakeClient())
+
+    assert price == 321.09
+
+
+@pytest.mark.asyncio
+async def test_fetch_stock_spot_price_retries_rate_limit(monkeypatch, caplog):
+    class _FakeClient:
+        def __init__(self):
+            self.calls = 0
+
+        async def get(self, url):
+            self.calls += 1
+            request = httpx.Request("GET", url)
+            if self.calls == 1:
+                response = httpx.Response(
+                    429,
+                    request=request,
+                    headers={"Retry-After": "9"},
+                    text="rate limited",
+                )
+                raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+            return httpx.Response(
+                200,
+                request=request,
+                json={"ticker": {"day": {"c": 201.5}}},
+            )
+
+    monkeypatch.setenv("POLYGON_API_KEY", "super-secret-key")
+    client = _FakeClient()
+
+    with (
+        patch("microservices.option_ingestor.api.asyncio.sleep", new=AsyncMock()) as mock_sleep,
+        caplog.at_level("WARNING"),
+    ):
+        price = await option_api.fetch_stock_spot_price(
+            "AMD",
+            client=client,
+            max_retries=3,
+        )
+
+    assert price == 201.5
+    assert client.calls == EXPECTED_RETRY_FETCH_CALLS
+    mock_sleep.assert_awaited_once_with(9.0)
+    assert "Polygon rate limited stock spot fetch; retrying" in caplog.text
+    assert "super-secret-key" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fetch_stock_spot_prices_for_underlyings_respects_interval(monkeypatch):
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    fetch_mock = AsyncMock(side_effect=[101.0, 202.0])
+    monkeypatch.setattr(option_api, "_build_snapshot_async_client", lambda timeout: _FakeClient())
+    monkeypatch.setattr(option_api, "fetch_stock_spot_price", fetch_mock)
+    monkeypatch.setattr(option_api, "STOCK_SNAPSHOT_FETCH_INTERVAL_SECONDS", 12.0)
+
+    with patch("microservices.option_ingestor.api.asyncio.sleep", new=AsyncMock()) as mock_sleep:
+        prices = await option_api.fetch_stock_spot_prices_for_underlyings(["AMD", "NVDA"])
+
+    assert prices == {"AMD": 101.0, "NVDA": 202.0}
+    mock_sleep.assert_awaited_once_with(12.0)
+
+
+@pytest.mark.asyncio
 async def test_upsert_option_contract_success(ingestor):
     contract = OptionsContract.from_dict(
         {
@@ -426,6 +623,7 @@ def test_build_snapshot_upsert_payload_includes_underlying_price():
     payload = _build_snapshot_upsert_payload(
         contract_ticker="TST",
         snapshot=snapshot,
+        underlying_price_override=123.45,
         last_updated_dt="dt",
         curr_datetime="now",
         greeks=None,

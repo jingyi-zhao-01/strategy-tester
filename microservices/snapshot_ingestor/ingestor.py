@@ -8,7 +8,10 @@ from collections import defaultdict
 
 import httpx
 
-from microservices.option_ingestor.api import fetch_chain_snapshots_for_underlying
+from microservices.option_ingestor.api import (
+    fetch_chain_snapshots_for_underlying,
+    fetch_stock_spot_prices_for_underlyings,
+)
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.shared.decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
@@ -50,7 +53,23 @@ class OptionSnapshotsIngestor(OptionIngestor):
                         contract.ticker
                     )
 
+            stock_spot_prices = await fetch_stock_spot_prices_for_underlyings(
+                sorted(active_contracts_by_underlying.keys())
+            )
+
             for underlying_ticker, active_tickers in active_contracts_by_underlying.items():
+                stock_spot_price = stock_spot_prices.get(underlying_ticker)
+                if stock_spot_price is None:
+                    logger.warning(
+                        "No stock spot price available for %s; falling back to option snapshot payload",
+                        underlying_ticker,
+                    )
+                else:
+                    logger.info(
+                        "Using stock spot price for %s: %s",
+                        underlying_ticker,
+                        stock_spot_price,
+                    )
                 logger.info(
                     "Fetching paginated chain snapshots for %s (%s active contracts)",
                     underlying_ticker,
@@ -71,7 +90,13 @@ class OptionSnapshotsIngestor(OptionIngestor):
                     underlying_ticker,
                 )
                 tasks = [
-                    asyncio.create_task(self._upsert_option_snapshot(contract_ticker, snapshot))
+                    asyncio.create_task(
+                        self._upsert_option_snapshot(
+                            contract_ticker,
+                            snapshot,
+                            underlying_price_override=stock_spot_price,
+                        )
+                    )
                     for contract_ticker, snapshot in valid_contract_snapshots
                 ]
                 await asyncio.gather(*tasks)
@@ -102,6 +127,7 @@ class OptionSnapshotsIngestor(OptionIngestor):
         self,
         contract_ticker: str,
         snapshot: OptionContractSnapshot,
+        underlying_price_override: float | None = None,
         max_retries: int = DB_RETRY_MAX_ATTEMPTS,
         base_delay_seconds: float = DB_RETRY_BASE_DELAY_SECONDS,
     ) -> "OptionSnapshot | None":
@@ -126,6 +152,7 @@ class OptionSnapshotsIngestor(OptionIngestor):
                 payload = _build_snapshot_upsert_payload(
                     contract_ticker=contract_ticker,
                     snapshot=snapshot,
+                    underlying_price_override=underlying_price_override,
                     last_updated_dt=last_updated_dt,
                     curr_datetime=curr_datetime,
                     greeks=greeks,
@@ -190,6 +217,7 @@ def _snapshot_greeks_json(snapshot: OptionContractSnapshot):
 def _build_snapshot_upsert_payload(
     contract_ticker: str,
     snapshot: OptionContractSnapshot,
+    underlying_price_override: float | None,
     last_updated_dt,
     curr_datetime,
     greeks,
@@ -204,11 +232,9 @@ def _build_snapshot_upsert_payload(
     day_open = snapshot.day.open if snapshot.day is not None else None
     day_close = snapshot.day.close if snapshot.day is not None else None
     day_change = snapshot.day.change_percent if snapshot.day is not None else None
-    underlying_price = (
-        snapshot.underlying_asset.price
-        if snapshot.underlying_asset is not None
-        else None
-    )
+    underlying_price = underlying_price_override
+    if underlying_price is None and snapshot.underlying_asset is not None:
+        underlying_price = snapshot.underlying_asset.price
     base_payload = {
         "open_interest": open_interest,
         "volume": volume,

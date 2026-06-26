@@ -32,6 +32,12 @@ SNAPSHOT_FETCH_RETRY_MAX_ATTEMPTS = int(os.getenv("SNAPSHOT_FETCH_RETRY_MAX_ATTE
 SNAPSHOT_FETCH_RETRY_BASE_DELAY_SECONDS = float(
     os.getenv("SNAPSHOT_FETCH_RETRY_BASE_DELAY_SECONDS", "0.5")
 )
+SNAPSHOT_FETCH_RATE_LIMIT_BASE_DELAY_SECONDS = float(
+    os.getenv("SNAPSHOT_FETCH_RATE_LIMIT_BASE_DELAY_SECONDS", "15.0")
+)
+STOCK_SNAPSHOT_FETCH_INTERVAL_SECONDS = float(
+    os.getenv("STOCK_SNAPSHOT_FETCH_INTERVAL_SECONDS", "12.0")
+)
 logger = logging.getLogger(__name__)
 
 
@@ -131,6 +137,52 @@ class Fetcher:
             base_delay_seconds=base_delay_seconds,
         )
 
+    @traced_span_async(name="fetch_stock_spot_price", attributes={"module": "POLYGON"})
+    async def fetch_stock_spot_price_async(
+        self,
+        underlying_asset: str,
+        *args,
+        client: httpx.AsyncClient | None = None,
+        **kwargs,
+    ) -> float | None:
+        url = (
+            "https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/"
+            f"tickers/{underlying_asset}?apiKey={self.api_key}"
+        )
+        connect_timeout = kwargs.get("connect_timeout", SNAPSHOT_FETCH_CONNECT_TIMEOUT)
+        read_timeout = kwargs.get("read_timeout", SNAPSHOT_FETCH_READ_TIMEOUT)
+        timeout = httpx.Timeout(
+            connect=connect_timeout,
+            read=read_timeout,
+            write=read_timeout,
+            pool=read_timeout,
+        )
+        max_retries = kwargs.get("max_retries", SNAPSHOT_FETCH_RETRY_MAX_ATTEMPTS)
+        base_delay_seconds = kwargs.get(
+            "base_delay_seconds", SNAPSHOT_FETCH_RETRY_BASE_DELAY_SECONDS
+        )
+        sanitized_url = _redact_url_query_param(url, "apiKey")
+
+        if client is None:
+            async with _build_snapshot_async_client(timeout=timeout) as request_client:
+                return await self._fetch_stock_spot_price_with_client(
+                    request_client=request_client,
+                    underlying_asset=underlying_asset,
+                    url=url,
+                    sanitized_url=sanitized_url,
+                    max_retries=max_retries,
+                    base_delay_seconds=base_delay_seconds,
+                )
+
+        return await self._fetch_stock_spot_price_with_client(
+            request_client=client,
+            underlying_asset=underlying_asset,
+            url=url,
+            sanitized_url=sanitized_url,
+            max_retries=max_retries,
+            base_delay_seconds=base_delay_seconds,
+        )
+
     async def _fetch_snapshot_with_client(
         self,
         request_client: httpx.AsyncClient,
@@ -169,6 +221,41 @@ class Fetcher:
                     )
                     return None
 
+                if _is_rate_limited_response(exc.response):
+                    retry_after_seconds = _retry_after_seconds(exc.response)
+                    delay = retry_after_seconds or (
+                        SNAPSHOT_FETCH_RATE_LIMIT_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+                    )
+                    if attempt < max_retries:
+                        logger.warning(
+                            "Polygon rate limited snapshot fetch; retrying "
+                            "| underlying_asset=%s, option_ticker_name=%s, "
+                            "status_code=%s, retry_after=%s, delay=%.2fs, attempt=%s/%s, url=%s",
+                            underlying_asset,
+                            option_ticker_name,
+                            exc.response.status_code,
+                            exc.response.headers.get("Retry-After"),
+                            delay,
+                            attempt,
+                            max_retries,
+                            sanitized_url,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                    logger.error(
+                        "Polygon rate limit exhausted for snapshot fetch "
+                        "| underlying_asset=%s, option_ticker_name=%s, "
+                        "status_code=%s, retry_after=%s, attempts=%s, url=%s",
+                        underlying_asset,
+                        option_ticker_name,
+                        exc.response.status_code,
+                        exc.response.headers.get("Retry-After"),
+                        max_retries,
+                        sanitized_url,
+                    )
+                    return None
+
                 logger.error(
                     "HTTP error %s: %s | underlying_asset=%s, option_ticker_name=%s, url=%s",
                     exc.response.status_code,
@@ -200,6 +287,108 @@ class Fetcher:
                     option_ticker_name,
                     connect_timeout,
                     read_timeout,
+                    delay,
+                    attempt,
+                    max_retries,
+                    sanitized_url,
+                )
+                await asyncio.sleep(delay)
+
+        return None
+
+    async def _fetch_stock_spot_price_with_client(
+        self,
+        request_client: httpx.AsyncClient,
+        underlying_asset: str,
+        url: str,
+        sanitized_url: str,
+        max_retries: int,
+        base_delay_seconds: float,
+    ) -> float | None:
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = await request_client.get(url)
+                response.raise_for_status()
+                price = _extract_stock_spot_price(response.json())
+                if price is None:
+                    logger.warning(
+                        "Stock spot price missing from snapshot payload | underlying_asset=%s, url=%s",
+                        underlying_asset,
+                        sanitized_url,
+                    )
+                    return None
+                logger.info(
+                    "Fetched stock spot price successfully | underlying_asset=%s, price=%s",
+                    underlying_asset,
+                    price,
+                )
+                return price
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == NOT_FOUND_STATUS_CODE:
+                    logger.warning(
+                        "Stock snapshot not found: %s (URL: %s)",
+                        underlying_asset,
+                        sanitized_url,
+                    )
+                    return None
+
+                if _is_rate_limited_response(exc.response):
+                    retry_after_seconds = _retry_after_seconds(exc.response)
+                    delay = retry_after_seconds or (
+                        SNAPSHOT_FETCH_RATE_LIMIT_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+                    )
+                    if attempt < max_retries:
+                        logger.warning(
+                            "Polygon rate limited stock spot fetch; retrying "
+                            "| underlying_asset=%s, status_code=%s, retry_after=%s, "
+                            "delay=%.2fs, attempt=%s/%s, url=%s",
+                            underlying_asset,
+                            exc.response.status_code,
+                            exc.response.headers.get("Retry-After"),
+                            delay,
+                            attempt,
+                            max_retries,
+                            sanitized_url,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                    logger.error(
+                        "Polygon rate limit exhausted for stock spot fetch "
+                        "| underlying_asset=%s, status_code=%s, retry_after=%s, "
+                        "attempts=%s, url=%s",
+                        underlying_asset,
+                        exc.response.status_code,
+                        exc.response.headers.get("Retry-After"),
+                        max_retries,
+                        sanitized_url,
+                    )
+                    return None
+
+                logger.error(
+                    "HTTP error %s fetching stock spot: %s | underlying_asset=%s, url=%s",
+                    exc.response.status_code,
+                    exc.response.text,
+                    underlying_asset,
+                    sanitized_url,
+                )
+                return None
+            except httpx.RequestError as exc:
+                if not _is_retryable_snapshot_request_error(exc) or attempt >= max_retries:
+                    logger.error(
+                        "Request error fetching stock spot: %s | underlying_asset=%s, url=%s",
+                        type(exc).__name__,
+                        underlying_asset,
+                        sanitized_url,
+                    )
+                    return None
+
+                delay = base_delay_seconds * (2 ** (attempt - 1))
+                logger.warning(
+                    "Retrying stock spot fetch after transient request error: %s "
+                    "| underlying_asset=%s, delay=%.2fs, attempt=%s/%s, url=%s",
+                    type(exc).__name__,
+                    underlying_asset,
                     delay,
                     attempt,
                     max_retries,
@@ -276,6 +465,49 @@ async def fetch_chain_snapshots_for_underlying(underlying_asset: str) -> list[Op
     return await asyncio.to_thread(option_fetcher.get_chain_snapshots)
 
 
+async def fetch_stock_spot_price(
+    underlying_asset: str,
+    *args,
+    client: httpx.AsyncClient | None = None,
+    **kwargs,
+) -> float | None:
+    option_fetcher = Fetcher(None)
+    return await option_fetcher.fetch_stock_spot_price_async(
+        underlying_asset,
+        *args,
+        client=client,
+        **kwargs,
+    )
+
+
+async def fetch_stock_spot_prices_for_underlyings(
+    underlying_assets: list[str],
+    *args,
+    **kwargs,
+) -> dict[str, float | None]:
+    if not underlying_assets:
+        return {}
+
+    timeout = httpx.Timeout(
+        connect=kwargs.get("connect_timeout", SNAPSHOT_FETCH_CONNECT_TIMEOUT),
+        read=kwargs.get("read_timeout", SNAPSHOT_FETCH_READ_TIMEOUT),
+        write=kwargs.get("read_timeout", SNAPSHOT_FETCH_READ_TIMEOUT),
+        pool=kwargs.get("read_timeout", SNAPSHOT_FETCH_READ_TIMEOUT),
+    )
+    prices: dict[str, float | None] = {}
+    async with _build_snapshot_async_client(timeout=timeout) as client:
+        for index, underlying_asset in enumerate(underlying_assets):
+            if index > 0 and STOCK_SNAPSHOT_FETCH_INTERVAL_SECONDS > 0:
+                await asyncio.sleep(STOCK_SNAPSHOT_FETCH_INTERVAL_SECONDS)
+            prices[underlying_asset] = await fetch_stock_spot_price(
+                underlying_asset,
+                *args,
+                client=client,
+                **kwargs,
+            )
+    return prices
+
+
 def _build_snapshot_async_client(timeout: httpx.Timeout) -> httpx.AsyncClient:
     limits = httpx.Limits(
         max_connections=SNAPSHOT_HTTP_MAX_CONNECTIONS,
@@ -333,9 +565,44 @@ def _is_retryable_snapshot_request_error(error: httpx.RequestError) -> bool:
     return isinstance(error, httpx.ConnectTimeout | httpx.ReadTimeout)
 
 
+def _is_rate_limited_response(response: httpx.Response) -> bool:
+    return response.status_code == 429
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    retry_after = response.headers.get("Retry-After")
+    if retry_after is None:
+        return None
+    try:
+        return max(0.0, float(retry_after))
+    except ValueError:
+        return None
+
+
+def _extract_stock_spot_price(payload: dict) -> float | None:
+    ticker_data = payload.get("ticker")
+    if not isinstance(ticker_data, dict):
+        return None
+    last_trade = ticker_data.get("lastTrade")
+    if isinstance(last_trade, dict) and last_trade.get("p") is not None:
+        return float(last_trade["p"])
+    minute_bar = ticker_data.get("min")
+    if isinstance(minute_bar, dict) and minute_bar.get("c") is not None:
+        return float(minute_bar["c"])
+    day_bar = ticker_data.get("day")
+    if isinstance(day_bar, dict) and day_bar.get("c") is not None:
+        return float(day_bar["c"])
+    previous_day_bar = ticker_data.get("prevDay")
+    if isinstance(previous_day_bar, dict) and previous_day_bar.get("c") is not None:
+        return float(previous_day_bar["c"])
+    return None
+
+
 __all__ = [
     "Fetcher",
     "fetch_chain_snapshots_for_underlying",
+    "fetch_stock_spot_price",
+    "fetch_stock_spot_prices_for_underlyings",
     "get_contract_within_price_range",
     "fetch_snapshots_batch",
 ]
