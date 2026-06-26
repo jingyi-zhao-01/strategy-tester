@@ -4,10 +4,11 @@ import asyncio
 import logging
 import os
 import traceback
+from collections import defaultdict
 
 import httpx
 
-from microservices.option_ingestor.api import fetch_snapshots_batch
+from microservices.option_ingestor.api import fetch_chain_snapshots_for_underlying
 from microservices.option_ingestor.ingestor import OptionIngestor
 from microservices.shared.decorator import (
     DATA_BASE_CONCURRENCY_LIMIT,
@@ -36,38 +37,42 @@ class OptionSnapshotsIngestor(OptionIngestor):
     async def ingest_option_snapshots(self):
         """Ingest option snapshots for all active contracts."""
         try:
-            total_contracts = 0
-            async for contracts_batch in self.option_retriever.stream_retrieve_active():
-                logger.info("Processing batch of %s contracts...", len(contracts_batch))
-                total_contracts += len(contracts_batch)
-                snapshots = await fetch_snapshots_batch(contracts_batch)
-                with start_span_sync(
-                    "transform_snapshot_batch",
-                    attributes={
-                        "module": "TRANSFORM",
-                        "contract_batch_size": len(contracts_batch),
-                        "snapshot_result_count": len(snapshots),
-                    },
-                ):
-                    if len(snapshots) != len(contracts_batch):
-                        raise RuntimeError(
-                            "Snapshot fetch result count mismatch: "
-                            f"contracts_batch_size={len(contracts_batch)} "
-                            f"snapshot_result_count={len(snapshots)}"
-                        )
-                    valid_contract_snapshots = [
-                        (contract, snapshot)
-                        for contract, snapshot in zip(contracts_batch, snapshots, strict=False)
-                        if snapshot is not None
-                    ]
+            active_contracts = await self.option_retriever.retrieve_active()
+            if not active_contracts:
+                logger.info("No active option contracts found for snapshot ingestion.")
+                return
+
+            active_contracts_by_underlying: dict[str, dict[str, str]] = defaultdict(dict)
+            total_contracts = len(active_contracts)
+            for contract in active_contracts:
+                if contract.underlying_ticker and contract.ticker:
+                    active_contracts_by_underlying[contract.underlying_ticker][contract.ticker] = (
+                        contract.ticker
+                    )
+
+            for underlying_ticker, active_tickers in active_contracts_by_underlying.items():
                 logger.info(
-                    "Fetched %s/%s snapshots successfully for current batch",
+                    "Fetching paginated chain snapshots for %s (%s active contracts)",
+                    underlying_ticker,
+                    len(active_tickers),
+                )
+                snapshots = await fetch_chain_snapshots_for_underlying(underlying_ticker)
+                valid_contract_snapshots = [
+                    (snapshot.details.ticker, snapshot)
+                    for snapshot in snapshots
+                    if snapshot is not None
+                    and snapshot.details is not None
+                    and snapshot.details.ticker in active_tickers
+                ]
+                logger.info(
+                    "Fetched %s/%s snapshots successfully for %s",
                     len(valid_contract_snapshots),
-                    len(contracts_batch),
+                    len(active_tickers),
+                    underlying_ticker,
                 )
                 tasks = [
-                    asyncio.create_task(self._upsert_option_snapshot(contract.ticker, snapshot))
-                    for contract, snapshot in valid_contract_snapshots
+                    asyncio.create_task(self._upsert_option_snapshot(contract_ticker, snapshot))
+                    for contract_ticker, snapshot in valid_contract_snapshots
                 ]
                 await asyncio.gather(*tasks)
             logger.info(

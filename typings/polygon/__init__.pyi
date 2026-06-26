@@ -14,6 +14,13 @@ class RESTClient:
         order: str | None = ...,
         sort: str | None = ...,
     ) -> Iterable[OptionsContract]: ...
+    def list_snapshot_options_chain(
+        self,
+        underlying_asset: str,
+        params: dict[str, Any] | None = ...,
+        raw: bool = ...,
+        options: Any = ...,
+    ) -> Iterable[OptionContractSnapshot]: ...
 
 class OptionsContract:
     ticker: str | None
@@ -35,10 +42,17 @@ class OptionContractSnapshotGreeks:
     theta: float | None
     vega: float | None
 
+class OptionDetails:
+    contract_type: str | None
+    expiration_date: str | None
+    strike_price: float | None
+    ticker: str | None
+
 class OptionContractSnapshot:
     implied_volatility: float | None
     open_interest: int | None
     day: OptionContractSnapshotDay | None
     greeks: OptionContractSnapshotGreeks | None
+    details: OptionDetails | None
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> OptionContractSnapshot: ...

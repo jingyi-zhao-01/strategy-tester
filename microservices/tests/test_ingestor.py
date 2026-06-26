@@ -19,6 +19,7 @@ EXPECTED_RETRY_FETCH_CALLS = 2
 def mock_option_retriever():
     mock = MagicMock()
     mock.with_ingest_time.return_value = mock
+    mock.retrieve_active = AsyncMock(return_value=[])
 
     async def empty_async_gen():
         for _ in ():
@@ -53,23 +54,33 @@ async def test_ingest_option_snapshots_empty(snapshots_ingestor):
 
 
 @pytest.mark.asyncio
-async def test_ingest_option_snapshots_raises_on_snapshot_count_mismatch(
+async def test_ingest_option_snapshots_uses_paginated_chain_results(
     monkeypatch, snapshots_ingestor
 ):
-    contract_a = MagicMock(ticker="O:TST1")
-    contract_b = MagicMock(ticker="O:TST2")
-
-    async def contract_batches():
-        yield [contract_a, contract_b]
-
-    snapshots_ingestor.option_retriever.stream_retrieve_active = contract_batches
-    monkeypatch.setattr(
-        "microservices.snapshot_ingestor.ingestor.fetch_snapshots_batch",
-        AsyncMock(return_value=[MagicMock()]),
+    contract_a = MagicMock(ticker="O:TST1", underlying_ticker="TST")
+    contract_b = MagicMock(ticker="O:TST2", underlying_ticker="TST")
+    snapshots_ingestor.option_retriever.retrieve_active = AsyncMock(
+        return_value=[contract_a, contract_b]
     )
 
-    with pytest.raises(RuntimeError, match="Snapshot fetch result count mismatch"):
-        await snapshots_ingestor.ingest_option_snapshots()
+    snapshot_a = MagicMock()
+    snapshot_a.details = MagicMock(ticker="O:TST1")
+    snapshot_b = MagicMock()
+    snapshot_b.details = MagicMock(ticker="O:TST2")
+    snapshot_extra = MagicMock()
+    snapshot_extra.details = MagicMock(ticker="O:OTHER")
+
+    monkeypatch.setattr(
+        "microservices.snapshot_ingestor.ingestor.fetch_chain_snapshots_for_underlying",
+        AsyncMock(return_value=[snapshot_a, snapshot_b, snapshot_extra]),
+    )
+    snapshots_ingestor._upsert_option_snapshot = AsyncMock()
+
+    await snapshots_ingestor.ingest_option_snapshots()
+
+    assert snapshots_ingestor._upsert_option_snapshot.await_count == 2
+    snapshots_ingestor._upsert_option_snapshot.assert_any_await("O:TST1", snapshot_a)
+    snapshots_ingestor._upsert_option_snapshot.assert_any_await("O:TST2", snapshot_b)
 
 
 @pytest.mark.asyncio
@@ -167,6 +178,25 @@ async def test_fetch_snapshots_batch_preserves_length_on_unexpected_fetch_error(
     results = await option_api.fetch_snapshots_batch(contracts)
 
     assert results == ["snapshot:O:NBIS1", None]
+
+
+@pytest.mark.asyncio
+async def test_fetch_chain_snapshots_for_underlying_uses_sdk_pagination(monkeypatch):
+    snapshot_a = MagicMock()
+    snapshot_b = MagicMock()
+
+    class _FakeFetcher:
+        def __init__(self, asset):
+            assert asset == "NBIS"
+
+        def get_chain_snapshots(self):
+            return [snapshot_a, snapshot_b]
+
+    monkeypatch.setattr(option_api, "Fetcher", _FakeFetcher)
+
+    results = await option_api.fetch_chain_snapshots_for_underlying("NBIS")
+
+    assert results == [snapshot_a, snapshot_b]
 
 
 @pytest.mark.asyncio

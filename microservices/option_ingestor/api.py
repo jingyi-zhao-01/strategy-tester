@@ -71,6 +71,17 @@ class Fetcher:
                 contracts.append(contract)
         return contracts
 
+    @traced_span_sync(name="fetch_chain_snapshots", attributes={"module": "POLYGON"})
+    def get_chain_snapshots(self) -> list[OptionContractSnapshot]:
+        snapshots: list[OptionContractSnapshot] = []
+        for snapshot in self.client.list_snapshot_options_chain(
+            self.asset or "",
+            params={"limit": 250},
+        ):
+            if isinstance(snapshot, OptionContractSnapshot):
+                snapshots.append(snapshot)
+        return snapshots
+
     @traced_span_async(name="fetch_daily_snapshot", attributes={"module": "POLYGON"})
     async def fetch_daily_snapshot_async(
         self,
@@ -260,6 +271,11 @@ async def fetch_snapshots_batch(
     return results
 
 
+async def fetch_chain_snapshots_for_underlying(underlying_asset: str) -> list[OptionContractSnapshot]:
+    option_fetcher = Fetcher(underlying_asset)
+    return await asyncio.to_thread(option_fetcher.get_chain_snapshots)
+
+
 def _build_snapshot_async_client(timeout: httpx.Timeout) -> httpx.AsyncClient:
     limits = httpx.Limits(
         max_connections=SNAPSHOT_HTTP_MAX_CONNECTIONS,
@@ -317,4 +333,9 @@ def _is_retryable_snapshot_request_error(error: httpx.RequestError) -> bool:
     return isinstance(error, httpx.ConnectTimeout | httpx.ReadTimeout)
 
 
-__all__ = ["Fetcher", "get_contract_within_price_range", "fetch_snapshots_batch"]
+__all__ = [
+    "Fetcher",
+    "fetch_chain_snapshots_for_underlying",
+    "get_contract_within_price_range",
+    "fetch_snapshots_batch",
+]

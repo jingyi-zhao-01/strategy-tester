@@ -48,6 +48,23 @@ class OptionRetriever:
             logger.exception("Error fetching option contracts: %s", e)
             return []
 
+    @bounded_db_connection
+    async def retrieve_active(self) -> list["Options"]:
+        try:
+            options_model = import_module("prisma.models").Options  # type: ignore
+            contracts = await options_model.prisma().find_many(
+                where={"expiration_date": {"gte": self.ingest_time}},
+            )
+            logger.info(
+                "Retrieved %s active option contracts for ingest session %s.",
+                len(contracts),
+                self.ingest_time,
+            )
+            return contracts
+        except Exception as e:
+            logger.exception("Error fetching active option contracts: %s", e)
+            return []
+
     @bounded_db_connection_asyncgen
     async def stream_retrieve_active(
         self, *args, **kwargs
