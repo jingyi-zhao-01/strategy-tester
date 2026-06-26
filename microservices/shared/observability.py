@@ -72,7 +72,7 @@ def initialize_tracing(service_name: str) -> None:
         )
         exporter = _build_otlp_exporter()
         if exporter is not None:
-            provider.add_span_processor(BatchSpanProcessor(exporter))
+            provider.add_span_processor(_build_span_processor(exporter))
         trace.set_tracer_provider(provider)
         _TRACE_READY = True
 
@@ -149,6 +149,16 @@ def _build_otlp_exporter() -> OTLPSpanExporter | None:
         endpoint=endpoint,
         headers=_parse_headers(os.getenv("OTEL_EXPORTER_OTLP_HEADERS", "")) or None,
         timeout=timeout,
+    )
+
+
+def _build_span_processor(exporter: OTLPSpanExporter) -> BatchSpanProcessor:
+    return BatchSpanProcessor(
+        exporter,
+        max_queue_size=int(os.getenv("OTEL_BSP_MAX_QUEUE_SIZE", "2048")),
+        max_export_batch_size=int(os.getenv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", "128")),
+        schedule_delay_millis=int(os.getenv("OTEL_BSP_SCHEDULE_DELAY", "2000")),
+        export_timeout_millis=int(os.getenv("OTEL_BSP_EXPORT_TIMEOUT", "5000")),
     )
 
 

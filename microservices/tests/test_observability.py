@@ -2,6 +2,7 @@ from opentelemetry import trace
 
 from microservices.shared.observability import (
     _build_otlp_exporter,
+    _build_span_processor,
     _parse_headers,
     initialize_tracing,
 )
@@ -51,3 +52,21 @@ def test_initialize_tracing_adds_datadog_resource_attributes(monkeypatch):
     assert resource_attributes["service.name"] == "snapshot-ingestor"
     assert resource_attributes["deployment.environment"] == "prod"
     assert resource_attributes["service.version"] == "1.2.3"
+
+
+def test_build_span_processor_uses_repo_defaults(monkeypatch):
+    monkeypatch.delenv("OTEL_BSP_MAX_QUEUE_SIZE", raising=False)
+    monkeypatch.delenv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", raising=False)
+    monkeypatch.delenv("OTEL_BSP_SCHEDULE_DELAY", raising=False)
+    monkeypatch.delenv("OTEL_BSP_EXPORT_TIMEOUT", raising=False)
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://example.com/v1/traces")
+
+    exporter = _build_otlp_exporter()
+    processor = _build_span_processor(exporter)
+
+    batch_processor = processor._batch_processor
+
+    assert batch_processor._max_queue_size == 2048
+    assert batch_processor._max_export_batch_size == 128
+    assert batch_processor._schedule_delay_millis == 2000
+    assert batch_processor._export_timeout_millis == 5000
