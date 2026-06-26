@@ -1,4 +1,10 @@
-from microservices.shared.observability import _build_otlp_exporter, _parse_headers
+from opentelemetry import trace
+
+from microservices.shared.observability import (
+    _build_otlp_exporter,
+    _parse_headers,
+    initialize_tracing,
+)
 
 
 def test_build_otlp_exporter_uses_trace_specific_endpoint(monkeypatch):
@@ -28,3 +34,20 @@ def test_parse_headers_handles_repo_standard_separator():
         "Authorization": "Basic abc123",
         "X-Scope-OrgID": "tenant",
     }
+
+
+def test_initialize_tracing_adds_datadog_resource_attributes(monkeypatch):
+    monkeypatch.setenv("DD_ENV", "prod")
+    monkeypatch.setenv("DD_VERSION", "1.2.3")
+
+    from microservices.shared import observability
+
+    observability._TRACE_READY = False
+    initialize_tracing("snapshot-ingestor")
+
+    provider = trace.get_tracer_provider()
+    resource_attributes = provider.resource.attributes
+
+    assert resource_attributes["service.name"] == "snapshot-ingestor"
+    assert resource_attributes["deployment.environment"] == "prod"
+    assert resource_attributes["service.version"] == "1.2.3"

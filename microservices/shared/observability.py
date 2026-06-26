@@ -52,7 +52,14 @@ def initialize_tracing(service_name: str) -> None:
     with _TRACE_LOCK:
         if _TRACE_READY:
             return
-        resource = Resource.create({"service.name": service_name})
+        resource_attributes: dict[str, str] = {"service.name": service_name}
+        deployment_environment = os.getenv("DD_ENV", "").strip()
+        service_version = os.getenv("DD_VERSION", "").strip()
+        if deployment_environment:
+            resource_attributes["deployment.environment"] = deployment_environment
+        if service_version:
+            resource_attributes["service.version"] = service_version
+        resource = Resource.create(resource_attributes)
         provider = TracerProvider(
             resource=resource,
             span_limits=SpanLimits(
